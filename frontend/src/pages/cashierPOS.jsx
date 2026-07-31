@@ -1,34 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, Trash2, ChevronDown, Plus, Minus, Store, 
   Lock, Clock, Banknote, X, Percent, CheckCircle 
 } from 'lucide-react';
 
-const INITIAL_PRODUCTS = [
-  { id: 1, name: "Lettuce Seed", price: 349.00, category: "Seeds" },
-  { id: 2, name: "Triple 14", price: 1000.00, category: "Fertilizers" },
-  { id: 3, name: "BiMeg", price: 300.00, category: "Feeds" },
-  { id: 4, name: "Eggplant Seed", price: 250.00, category: "Seeds" },
-  { id: 5, name: "Omega 1", price: 550.00, category: "Feeds" },
-  { id: 6, name: "Compose", price: 1200.00, category: "Fertilizers" },
-  { id: 7, name: "Worm Killer", price: 120.00, category: "Pesticides" },
-  { id: 8, name: "Tomato Seed", price: 380.00, category: "Seeds" },
-  { id: 9, name: "Shovel", price: 400.00, category: "Tools" },
-  { id: 10, name: "Omega 2", price: 650.00, category: "Feeds" },
-  { id: 11, name: "Rat killer", price: 100.00, category: "Pesticides" },
-  { id: 12, name: "Wheel Barrow", price: 150.00, category: "Tools" },
-];
-
 export default function CashierPOS() {
-  const [products] = useState(INITIAL_PRODUCTS);
+  // LIVE BACKEND STATES
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
 
-  const [cart, setCart] = useState([
-    { id: 1, name: "Lettuce Seed", unitPrice: 349.00, quantity: 2 },
-    { id: 2, name: "Triple 14", unitPrice: 1000.00, quantity: 1 },
-  ]);
+  const [cart, setCart] = useState([]);
 
   // FEATURE 1: Supervisor Discount States
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -48,6 +34,28 @@ export default function CashierPOS() {
     p10: 0, p5: 0, p1: 0, c25: 0
   });
 
+  // 1. FETCH PRODUCTS FROM POSTGRESQL BACKEND
+  const fetchProducts = () => {
+    fetch('http://localhost:5000/api/products')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch products');
+        return res.json();
+      })
+      .then((data) => {
+        setProducts(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error fetching products:', err);
+        setError(err.message);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
   // CART CALCULATIONS
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const discountAmount = (subtotal * discountPercent) / 100;
@@ -55,9 +63,18 @@ export default function CashierPOS() {
 
   // Cart Handler Functions
   const handleAddToCart = (product) => {
+    if (product.stock <= 0) {
+      alert("Item is out of stock!");
+      return;
+    }
+
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === product.id);
       if (existing) {
+        if (existing.quantity >= product.stock) {
+          alert(`Cannot add more than remaining stock (${product.stock})`);
+          return prevCart;
+        }
         return prevCart.map((item) =>
           item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
         );
@@ -67,11 +84,17 @@ export default function CashierPOS() {
   };
 
   const handleUpdateQuantity = (id, delta) => {
+    const targetProduct = products.find(p => p.id === id);
+
     setCart((prevCart) =>
       prevCart
         .map((item) => {
           if (item.id === id) {
             const newQty = item.quantity + delta;
+            if (targetProduct && newQty > targetProduct.stock) {
+              alert(`Cannot exceed available stock of ${targetProduct.stock}`);
+              return item;
+            }
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
           return item;
@@ -91,7 +114,7 @@ export default function CashierPOS() {
 
   // FEATURE 1: Discount Authorization Logic
   const handleApplyDiscount = () => {
-    if (supervisorPassword === "super123") { // Mock supervisor password
+    if (supervisorPassword === "super123") {
       setDiscountPercent(Number(tempDiscountInput));
       setShowDiscountModal(false);
       setSupervisorPassword("");
@@ -122,6 +145,48 @@ export default function CashierPOS() {
     setShowPendingModal(false);
   };
 
+  // 2. SUBMIT CONFIRMED TRANSACTION TO POSTGRESQL BACKEND
+  const handleConfirmSale = async () => {
+    if (cart.length === 0) {
+      alert("Cart is empty!");
+      return;
+    }
+
+    const payload = {
+      items: cart.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+      })),
+      subtotal,
+      discountPercent,
+      discountAmount,
+      totalAmount: cartTotal,
+      paymentMethod: paymentMethod.toUpperCase(),
+      cashierId: 'CASHIER-1',
+    };
+
+    try {
+      const response = await fetch('http://localhost:5000/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        alert(`Transaction successful! PHP ${cartTotal.toFixed(2)} recorded to PostgreSQL.`);
+        handleClearCart();
+        fetchProducts(); // Refresh product list to show updated stock counts
+      } else {
+        alert("Transaction failed to process.");
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      alert("Error connecting to server!");
+    }
+  };
+
   // FEATURE 3: EOD Cash Denomination Totaling
   const calculatePhysicalCash = () => {
     return (
@@ -147,6 +212,25 @@ export default function CashierPOS() {
     const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  if (loading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[#EAE8FE] font-bold text-gray-700">
+        Loading inventory from PostgreSQL...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col h-full w-full items-center justify-center bg-[#EAE8FE] gap-2">
+        <p className="text-red-600 font-bold">Failed to load inventory: {error}</p>
+        <button onClick={fetchProducts} className="px-4 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-bold">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col lg:flex-row h-full w-full bg-[#EAE8FE] p-4 gap-4 font-sans overflow-hidden box-border">
@@ -250,8 +334,13 @@ export default function CashierPOS() {
                 </div>
                 <div className="text-gray-800 font-medium text-xs">
                   <div className="truncate font-semibold">{product.name}</div>
-                  <div className="text-gray-600 font-bold mt-0.5">
-                    PHP {product.price.toFixed(2)}
+                  <div className="flex justify-between items-center mt-0.5">
+                    <span className="text-gray-600 font-bold">
+                      PHP {Number(product.price).toFixed(2)}
+                    </span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                      Stock: {product.stock}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -383,8 +472,9 @@ export default function CashierPOS() {
             Clear
           </button>
           <button
-            onClick={() => alert(`Confirmed sale of PHP ${cartTotal.toFixed(2)} via ${paymentMethod}`)}
-            className="py-2 bg-[#B8ADA7] hover:bg-[#a89c96] text-gray-900 text-xs font-bold rounded-lg transition-colors shadow-sm"
+            onClick={handleConfirmSale}
+            disabled={cart.length === 0}
+            className="py-2 bg-[#B8ADA7] hover:bg-[#a89c96] text-gray-900 text-xs font-bold rounded-lg transition-colors shadow-sm disabled:opacity-50"
           >
             Confirm
           </button>
