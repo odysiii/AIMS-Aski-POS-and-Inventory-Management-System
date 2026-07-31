@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  name      String
+  price     Float
+  category  String   @default("Uncategorized")
+  stock     Int      @default(0)
+  sku       String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PendingOrder {
+  id               Int                @id @default(autoincrement())
+  orderReference   String             @unique
+  subtotal         Float
+  discountPercent  Float              @default(0)
+  total            Float
+  cashierId        String             @default("CASHIER-1")
+  createdAt        DateTime           @default(now())
+  items            PendingOrderItem[]
+}
+
+model PendingOrderItem {
+  id             Int          @id @default(autoincrement())
+  pendingOrderId Int
+  pendingOrder   PendingOrder @relation(fields: [pendingOrderId], references: [id], onDelete: Cascade)
+  productId      Int
+  name           String
+  unitPrice      Float
+  quantity       Int
+}
+
+model Transaction {
+  id                   Int               @id @default(autoincrement())
+  transactionNo        String            @unique
+  subtotal             Float
+  discountPercent      Float             @default(0)
+  discountAmount       Float             @default(0)
+  supervisorAuthorized Boolean           @default(false)
+  totalAmount          Float
+  paymentMethod        String
+  cashierId            String            @default("CASHIER-1")
+  createdAt            DateTime          @default(now())
+  items                TransactionItem[]
+}
+
+model TransactionItem {
+  id            Int         @id @default(autoincrement())
+  transactionId Int
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     Int
+  name          String
+  unitPrice     Float
+  quantity      Int
+  subtotal      Float
+}
+
+model Reconciliation {
+  id                 Int      @id @default(autoincrement())
+  reconciliationDate DateTime @default(now())
+  cashierId          String
+  p1000              Int      @default(0)
+  p500               Int      @default(0)
+  p200               Int      @default(0)
+  p100               Int      @default(0)
+  p50                Int      @default(0)
+  p20                Int      @default(0)
+  p10                Int      @default(0)
+  p5                 Int      @default(0)
+  p1                 Int      @default(0)
+  c25                Int      @default(0)
+  totalCountedCash   Float
+  expectedSystemCash Float
+  variance           Float
+  status             String
+  createdAt          DateTime @default(now())
+}

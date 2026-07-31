@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Trash2, ChevronDown, Plus, Minus, Store } from 'lucide-react';
+import { 
+  Search, Trash2, ChevronDown, Plus, Minus, Store, 
+  Lock, Clock, Banknote, X, Percent, CheckCircle 
+} from 'lucide-react';
 
 const INITIAL_PRODUCTS = [
   { id: 1, name: "Lettuce Seed", price: 349.00, category: "Seeds" },
@@ -20,16 +23,37 @@ export default function CashierPOS() {
   const [products] = useState(INITIAL_PRODUCTS);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [paymentMethod, setPaymentMethod] = useState("Card");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
 
   const [cart, setCart] = useState([
-    { id: 1, name: "Product 1", unitPrice: 349.00, quantity: 2 },
-    { id: 2, name: "Product 2", unitPrice: 1000.00, quantity: 1 },
-    { id: 3, name: "Product 3", unitPrice: 300.00, quantity: 3 },
-    { id: 4, name: "Product 4", unitPrice: 250.00, quantity: 2 },
-    { id: 5, name: "Product 5", unitPrice: 550.00, quantity: 1 },
+    { id: 1, name: "Lettuce Seed", unitPrice: 349.00, quantity: 2 },
+    { id: 2, name: "Triple 14", unitPrice: 1000.00, quantity: 1 },
   ]);
 
+  // FEATURE 1: Supervisor Discount States
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [supervisorPassword, setSupervisorPassword] = useState("");
+  const [tempDiscountInput, setTempDiscountInput] = useState(10);
+  const [discountError, setDiscountError] = useState("");
+
+  // FEATURE 2: Pending Transactions States
+  const [pendingSales, setPendingSales] = useState([]);
+  const [showPendingModal, setShowPendingModal] = useState(false);
+
+  // FEATURE 3: End of Day Reconciliation States
+  const [showEODModal, setShowEODModal] = useState(false);
+  const [cashDenominations, setCashDenominations] = useState({
+    p1000: 0, p500: 0, p200: 0, p100: 0, p50: 0, p20: 0,
+    p10: 0, p5: 0, p1: 0, c25: 0
+  });
+
+  // CART CALCULATIONS
+  const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const discountAmount = (subtotal * discountPercent) / 100;
+  const cartTotal = Math.max(0, subtotal - discountAmount);
+
+  // Cart Handler Functions
   const handleAddToCart = (product) => {
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === product.id);
@@ -62,9 +86,61 @@ export default function CashierPOS() {
 
   const handleClearCart = () => {
     setCart([]);
+    setDiscountPercent(0);
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  // FEATURE 1: Discount Authorization Logic
+  const handleApplyDiscount = () => {
+    if (supervisorPassword === "super123") { // Mock supervisor password
+      setDiscountPercent(Number(tempDiscountInput));
+      setShowDiscountModal(false);
+      setSupervisorPassword("");
+      setDiscountError("");
+    } else {
+      setDiscountError("Invalid Supervisor Password!");
+    }
+  };
+
+  // FEATURE 2: Park/Hold Sale Logic
+  const handleHoldSale = () => {
+    if (cart.length === 0) return;
+    const newPendingOrder = {
+      id: `PEND-${Date.now().toString().slice(-4)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      cart: [...cart],
+      discountPercent,
+      total: cartTotal
+    };
+    setPendingSales((prev) => [...prev, newPendingOrder]);
+    handleClearCart();
+  };
+
+  const handleRestorePendingSale = (pendingOrder) => {
+    setCart(pendingOrder.cart);
+    setDiscountPercent(pendingOrder.discountPercent);
+    setPendingSales((prev) => prev.filter((o) => o.id !== pendingOrder.id));
+    setShowPendingModal(false);
+  };
+
+  // FEATURE 3: EOD Cash Denomination Totaling
+  const calculatePhysicalCash = () => {
+    return (
+      (cashDenominations.p1000 * 1000) +
+      (cashDenominations.p500 * 500) +
+      (cashDenominations.p200 * 200) +
+      (cashDenominations.p100 * 100) +
+      (cashDenominations.p50 * 50) +
+      (cashDenominations.p20 * 20) +
+      (cashDenominations.p10 * 10) +
+      (cashDenominations.p5 * 5) +
+      (cashDenominations.p1 * 1) +
+      (cashDenominations.c25 * 0.25)
+    );
+  };
+
+  const expectedSales = 15498.00; // Example system expected total
+  const totalCountedCash = calculatePhysicalCash();
+  const variance = totalCountedCash - expectedSales;
 
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -78,18 +154,44 @@ export default function CashierPOS() {
       {/* LEFT SECTION: PRODUCT CATALOG */}
       <div className="flex-1 flex flex-col h-full min-h-0 bg-transparent">
         
-        {/* Top Header Title */}
-        <div className="flex items-center gap-3 mb-3 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-sm">
-            <Store className="w-5 h-5" />
+        {/* Top Header Title & Action Buttons */}
+        <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-sm">
+              <Store className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-base font-extrabold text-gray-800 uppercase tracking-wide leading-tight">
+                ASKI MULTI-COOP
+              </h1>
+              <p className="text-xs font-semibold text-gray-500 leading-tight">
+                Isynergies, Inc.
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h1 className="text-base font-extrabold text-gray-800 uppercase tracking-wide leading-tight">
-              ASKI MULTI-COOP
-            </h1>
-            <p className="text-xs font-semibold text-gray-500 leading-tight">
-              Isynergies, Inc.
-            </p>
+
+          {/* EOD & Pending Actions Header Toolbar */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPendingModal(true)}
+              className="relative px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+            >
+              <Clock className="w-4 h-4" />
+              Pending
+              {pendingSales.length > 0 && (
+                <span className="ml-1 bg-amber-600 text-white rounded-full text-[10px] w-4 h-4 flex items-center justify-center">
+                  {pendingSales.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowEODModal(true)}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+            >
+              <Banknote className="w-4 h-4" />
+              End of Day
+            </button>
           </div>
         </div>
 
@@ -134,7 +236,7 @@ export default function CashierPOS() {
           </div>
         </div>
 
-        {/* Scrollable Product Grid */}
+        {/* Product Grid */}
         <div className="flex-1 bg-[#F5F2F0] rounded-2xl p-3 overflow-y-auto min-h-0 shadow-inner">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {filteredProducts.map((product) => (
@@ -161,10 +263,19 @@ export default function CashierPOS() {
       {/* RIGHT SECTION: ORDER DETAILS */}
       <div className="w-full lg:w-80 xl:w-88 bg-[#FAF7F5] rounded-2xl p-4 flex flex-col h-full min-h-0 shadow-lg border border-gray-100 shrink-0">
         
-        <h2 className="text-base font-bold text-gray-900 mb-2 shrink-0">Order Details</h2>
+        <div className="flex justify-between items-center mb-2 shrink-0">
+          <h2 className="text-base font-bold text-gray-900">Order Details</h2>
+          <button
+            onClick={handleHoldSale}
+            disabled={cart.length === 0}
+            className="text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
+          >
+            Hold Sale
+          </button>
+        </div>
         <hr className="border-gray-200 mb-2 shrink-0" />
 
-        {/* Scrollable Cart Item List */}
+        {/* Cart Item List */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1 mb-2 min-h-0">
           {cart.length === 0 ? (
             <div className="text-center py-6 text-gray-400 text-xs">Cart is empty</div>
@@ -186,25 +297,16 @@ export default function CashierPOS() {
                     PHP {(item.unitPrice * item.quantity).toFixed(2)}
                   </span>
                   <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-full border border-gray-200">
-                    <button
-                      onClick={() => handleUpdateQuantity(item.id, -1)}
-                      className="text-gray-600 hover:text-black p-0.5"
-                    >
+                    <button onClick={() => handleUpdateQuantity(item.id, -1)} className="text-gray-600 hover:text-black p-0.5">
                       <Minus className="w-2.5 h-2.5" />
                     </button>
                     <span className="font-semibold text-[11px] px-0.5 min-w-[10px] text-center">
                       {item.quantity}
                     </span>
-                    <button
-                      onClick={() => handleUpdateQuantity(item.id, 1)}
-                      className="text-gray-600 hover:text-black p-0.5"
-                    >
+                    <button onClick={() => handleUpdateQuantity(item.id, 1)} className="text-gray-600 hover:text-black p-0.5">
                       <Plus className="w-2.5 h-2.5" />
                     </button>
-                    <button
-                      onClick={() => handleRemoveItem(item.id)}
-                      className="text-gray-400 hover:text-red-500 ml-0.5 p-0.5"
-                    >
+                    <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 ml-0.5 p-0.5">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -214,12 +316,35 @@ export default function CashierPOS() {
           )}
         </div>
 
-        {/* Total Summary Row */}
-        <div className="flex justify-between items-center py-2 border-t border-gray-200 mb-2 shrink-0">
-          <span className="text-sm font-bold text-gray-800">Total:</span>
-          <span className="text-base font-extrabold text-gray-900">
-            PHP {cartTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
+        {/* Total Summary Row & Discount Trigger */}
+        <div className="border-t border-gray-200 pt-2 mb-2 shrink-0 space-y-1">
+          <div className="flex justify-between items-center text-xs text-gray-600">
+            <span>Subtotal:</span>
+            <span>PHP {subtotal.toFixed(2)}</span>
+          </div>
+
+          {/* Applied Discount Line */}
+          {discountPercent > 0 && (
+            <div className="flex justify-between items-center text-xs text-emerald-700 font-semibold">
+              <span>Discount ({discountPercent}%):</span>
+              <span>- PHP {discountAmount.toFixed(2)}</span>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-1">
+            <span className="text-sm font-bold text-gray-800">Total:</span>
+            <span className="text-base font-extrabold text-gray-900">
+              PHP {cartTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setShowDiscountModal(true)}
+            className="w-full text-left text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1"
+          >
+            <Percent className="w-3 h-3" />
+            {discountPercent > 0 ? "Change Discount" : "Apply Supervisor Discount"}
+          </button>
         </div>
 
         {/* Payment Options */}
@@ -266,6 +391,176 @@ export default function CashierPOS() {
         </div>
 
       </div>
+
+      {/* --- MODAL 1: SUPERVISOR DISCOUNT AUTHORIZATION --- */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-xs shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-amber-600" />
+                Supervisor Approval
+              </h3>
+              <button onClick={() => setShowDiscountModal(false)}>
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1">Discount Percentage (%)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={tempDiscountInput}
+                  onChange={(e) => setTempDiscountInput(e.target.value)}
+                  className="w-full border rounded-lg p-2 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1">Supervisor Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter Password (super123)"
+                  value={supervisorPassword}
+                  onChange={(e) => setSupervisorPassword(e.target.value)}
+                  className="w-full border rounded-lg p-2 text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+
+              {discountError && (
+                <p className="text-[11px] font-bold text-red-500">{discountError}</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleApplyDiscount}
+              className="w-full py-2 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold transition-all"
+            >
+              Authorize & Apply
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 2: PENDING SALES AREA --- */}
+      {showPendingModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-600" />
+                Pending Sales Queue
+              </h3>
+              <button onClick={() => setShowPendingModal(false)}>
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+              {pendingSales.length === 0 ? (
+                <p className="text-center text-xs text-gray-400 py-6">No sales on hold</p>
+              ) : (
+                pendingSales.map((item) => (
+                  <div key={item.id} className="p-3 bg-gray-50 border rounded-xl flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-gray-800">{item.id} ({item.timestamp})</div>
+                      <div className="text-gray-500 text-[11px]">{item.cart.length} item(s)</div>
+                      <div className="font-semibold text-gray-900 mt-0.5">PHP {item.total.toFixed(2)}</div>
+                    </div>
+                    <button
+                      onClick={() => handleRestorePendingSale(item)}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs"
+                    >
+                      Resume
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 3: END OF DAY RECONCILIATION --- */}
+      {showEODModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-2 shrink-0">
+              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                <Banknote className="w-4 h-4 text-emerald-700" />
+                End of Day Cash Reconciliation
+              </h3>
+              <button onClick={() => setShowEODModal(false)}>
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+              <p className="text-xs text-gray-500 font-medium">Input physical cash denomination quantities below:</p>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { label: "₱1000 Bill", key: "p1000" },
+                  { label: "₱500 Bill", key: "p500" },
+                  { label: "₱200 Bill", key: "p200" },
+                  { label: "₱100 Bill", key: "p100" },
+                  { label: "₱50 Bill", key: "p50" },
+                  { label: "₱20 Bill", key: "p20" },
+                  { label: "₱10 Coin", key: "p10" },
+                  { label: "₱5 Coin", key: "p5" },
+                  { label: "₱1 Coin", key: "p1" },
+                  { label: "25¢ Coin", key: "c25" },
+                ].map((denom) => (
+                  <div key={denom.key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border">
+                    <span className="font-semibold text-gray-700">{denom.label}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={cashDenominations[denom.key]}
+                      onChange={(e) =>
+                        setCashDenominations({ ...cashDenominations, [denom.key]: Number(e.target.value) })
+                      }
+                      className="w-16 border rounded p-1 text-center font-bold text-gray-800"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Reconciliation Audit Box */}
+              <div className="p-3 bg-gray-100 rounded-xl space-y-1.5 text-xs">
+                <div className="flex justify-between font-medium text-gray-600">
+                  <span>Counted Cash:</span>
+                  <span className="font-bold text-gray-800">PHP {totalCountedCash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-gray-600">
+                  <span>Expected System Cash:</span>
+                  <span className="font-bold text-gray-800">PHP {expectedSales.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold border-t pt-1 text-sm">
+                  <span>Variance:</span>
+                  <span className={variance >= 0 ? "text-emerald-700" : "text-red-600"}>
+                    PHP {variance.toFixed(2)} {variance >= 0 ? "(Over)" : "(Short)"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                alert(`Reconciliation submitted! Cash Variance: PHP ${variance.toFixed(2)}`);
+                setShowEODModal(false);
+              }}
+              className="w-full py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shrink-0"
+            >
+              Submit Reconciliation
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

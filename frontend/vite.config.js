@@ -5,6 +5,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     tailwindcss(),
@@ -15,5 +16,11 @@ export default defineConfig({
       react: path.resolve(__dirname, './node_modules/react'),
       'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
     },
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: true, // Listens on all network interfaces
+    allowedHosts: true, // <--- ADD THIS LINE (Allows VS Code forwarded URLs to load assets)
   },
 })
