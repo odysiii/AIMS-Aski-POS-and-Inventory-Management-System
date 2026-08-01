@@ -1,17 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
-const { Pool } = require('pg');
+
+// Import Models
+const ProductModel = require('./models/Product').ProductModel;
+const TransactionModel = require('./models/Transaction');
+const ReconciliationModel = require('./models/Reconciliation');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Setup Database Connection Pool and Prisma
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
 
 // Middleware
 app.use(cors());
@@ -22,9 +19,7 @@ app.use(express.json());
 // 1. Get All Products
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await prisma.product.findMany({
-      orderBy: { id: 'asc' },
-    });
+    const products = await ProductModel.findAll();
     res.json(products);
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -32,46 +27,24 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// 2. Create New Transaction (Checkout)
-app.post('/api/transactions', async (req, res) => {
-  const { items, subtotal, discountPercent, discountAmount, totalAmount, paymentMethod, cashierId } = req.body;
-
+// 2. Search Product by Barcode or 6-digit Code
+app.get('/api/products/barcode/:code', async (req, res) => {
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      // Create Transaction and line items
-      const transaction = await tx.transaction.create({
-        data: {
-          transactionNo: `TXN-${Date.now()}`,
-          subtotal,
-          discountPercent: discountPercent || 0,
-          discountAmount: discountAmount || 0,
-          totalAmount,
-          paymentMethod,
-          cashierId: cashierId || 'CASHIER-1',
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              name: item.name,
-              unitPrice: item.unitPrice,
-              quantity: item.quantity,
-              subtotal: item.unitPrice * item.quantity,
-            })),
-          },
-        },
-        include: { items: true },
-      });
+    const products = await ProductModel.findByBarcode(req.params.code);
+    if (!products || products.length === 0) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    res.json(products);
+  } catch (error) {
+    console.error('Error finding barcode:', error);
+    res.status(500).json({ error: 'Barcode lookup failed' });
+  }
+});
 
-      // Update product inventory stock
-      for (const item of items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-      }
-
-      return transaction;
-    });
-
+// 3. Create New Transaction (Checkout)
+app.post('/api/transactions', async (req, res) => {
+  try {
+    const result = await TransactionModel.createCheckout(req.body);
     res.status(201).json(result);
   } catch (error) {
     console.error('Transaction error:', error);
@@ -79,17 +52,49 @@ app.post('/api/transactions', async (req, res) => {
   }
 });
 
-// 3. Get All Transactions
+// 4. Get All Transactions
 app.get('/api/transactions', async (req, res) => {
   try {
-    const transactions = await prisma.transaction.findMany({
-      include: { items: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const transactions = await TransactionModel.findAll();
     res.json(transactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
+// --- RECONCILIATION ROUTES ---
+
+// Get Expected Cash for Today
+app.get('/api/reconciliation/expected-cash', async (req, res) => {
+  try {
+    const expectedCash = await ReconciliationModel.getExpectedCashForToday();
+    res.json({ expectedCash });
+  } catch (error) {
+    console.error('Error Fetching Expected Cash of EOD:', error);
+    res.status(500).json({ error: 'Failed to compute Expected Cash of EOD' });
+  }
+});
+
+// Save End of Day Reconciliation
+app.post('/api/reconciliation', async (req, res) => {
+  try {
+    const record = await ReconciliationModel.create(req.body); // Passes req.body object
+    res.status(201).json({ message: 'Reconciliation Submitted', record });
+  } catch (error) {
+    console.error('Error creating reconciliation:', error);
+    res.status(500).json({ error: 'Failed to submit reconciliation' });
+  }
+});
+
+// Get All Historical Reconciliations
+app.get('/api/reconciliation', async (req, res) => {
+  try {
+    const recons = await ReconciliationModel.findAll();
+    res.json(recons);
+  } catch (error) {
+    console.error('Error fetching reconciliations:', error);
+    res.status(500).json({ error: 'Failed to fetch all reconciliations' });
   }
 });
 

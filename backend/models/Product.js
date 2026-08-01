@@ -1,32 +1,51 @@
-const mongoose = require('mongoose');
+// models/Product.js
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { Pool } = require('pg');
 
-const productSchema = new mongoose.Schema({
-  name: { 
-    type: String, 
-    required: [true, 'Product name is required'],
-    trim: true 
-  },
-  price: { 
-    type: Number, 
-    required: [true, 'Price is required'],
-    min: 0 
-  },
-  category: { 
-    type: String, 
-    required: true,
-    enum: ['Seeds', 'Fertilizers', 'Feeds', 'Pesticides', 'Tools', 'Uncategorized'],
-    default: 'Uncategorized'
-  },
-  stock: { 
-    type: Number, 
-    required: true, 
-    default: 0 
-  },
-  sku: { 
-    type: String, 
-    unique: true, 
-    sparse: true 
-  }
-}, { timestamps: true });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
-module.exports = mongoose.model('Product', productSchema);
+const ProductModel = {
+  // Fetch all products ordered by ID
+  findAll: async () => {
+    return await prisma.product.findMany({
+      orderBy: { id: 'asc' },
+    });
+  },
+
+  // Find product by ID
+  findById: async (id) => {
+    return await prisma.product.findUnique({
+      where: { id: parseInt(id) },
+    });
+  },
+
+  // Find product by exact barcode OR matching last 6 digits
+  findByBarcode: async (code) => {
+    return await prisma.product.findMany({
+      where: {
+        OR: [
+          { barcode: code },
+          { barcode: { endsWith: code } },
+        ],
+      },
+    });
+  },
+
+  // Create a new product
+  create: async (data) => {
+    return await prisma.product.create({
+      data: {
+        barcode: data.barcode,
+        name: data.name,
+        price: parseFloat(data.price),
+        category: data.category || 'Uncategorized',
+        stock: parseInt(data.stock) || 0,
+      },
+    });
+  },
+};
+
+module.exports = { ProductModel, prisma }; // Exporting prisma instance for transactions

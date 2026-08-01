@@ -66,7 +66,8 @@ model TransactionItem {
 model Reconciliation {
   id                 Int      @id @default(autoincrement())
   reconciliationDate DateTime @default(now())
-  cashierId          String
+  cashierId          String   @default("CASHIER-1")
+  
   p1000              Int      @default(0)
   p500               Int      @default(0)
   p200               Int      @default(0)
@@ -77,9 +78,13 @@ model Reconciliation {
   p5                 Int      @default(0)
   p1                 Int      @default(0)
   c25                Int      @default(0)
-  totalCountedCash   Float
-  expectedSystemCash Float
-  variance           Float
-  status             String
+
+  countedCash        Float    @default(0)
+  totalCountedCash   Float    @default(0)
+  expectedSystemCash Float    @default(0)
+  variance           Float    @default(0)
+
+  status             String   @default("COMPLETED")
+  notes              String?
   createdAt          DateTime @default(now())
 }

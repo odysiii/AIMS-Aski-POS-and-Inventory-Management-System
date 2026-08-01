@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Trash2, ChevronDown, Plus, Minus, Store, 
-  Lock, Clock, Banknote, X, Percent, CheckCircle 
+import {
+  Search, Trash2, ChevronDown, Plus, Minus, Store,
+  Lock, Clock, Banknote, X, Percent, Download
 } from 'lucide-react';
+import { exportCsv } from '../utils/exportCsv';
 
 export default function CashierPOS() {
   // LIVE BACKEND STATES
@@ -29,13 +30,24 @@ export default function CashierPOS() {
 
   // FEATURE 3: End of Day Reconciliation States
   const [showEODModal, setShowEODModal] = useState(false);
+  const [expectedSales, setExpectedSales] = useState(0);
   const [cashDenominations, setCashDenominations] = useState({
     p1000: 0, p500: 0, p200: 0, p100: 0, p50: 0, p20: 0,
     p10: 0, p5: 0, p1: 0, c25: 0
   });
 
+  // Handler for Denomination Inputs
+  const handleDenominationChange = (key, value) => {
+    const numericValue = value === '' ? 0 : Math.max(0, parseInt(value, 10) || 0);
+    setCashDenominations((prev) => ({
+      ...prev,
+      [key]: numericValue,
+    }));
+  };
+
   // 1. FETCH PRODUCTS FROM POSTGRESQL BACKEND
   const fetchProducts = () => {
+    setLoading(true);
     fetch('http://localhost:5000/api/products')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch products');
@@ -52,14 +64,37 @@ export default function CashierPOS() {
       });
   };
 
+  // FETCH PRODUCTS ONLY ON LOAD
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  // CART CALCULATIONS
+  // DERIVED CALCULATIONS
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const discountAmount = (subtotal * discountPercent) / 100;
   const cartTotal = Math.max(0, subtotal - discountAmount);
+
+  // EOD Cash Calculation
+  const totalCountedCash = (
+    ((cashDenominations.p1000 || 0) * 1000) +
+    ((cashDenominations.p500 || 0) * 500) +
+    ((cashDenominations.p200 || 0) * 200) +
+    ((cashDenominations.p100 || 0) * 100) +
+    ((cashDenominations.p50 || 0) * 50) +
+    ((cashDenominations.p20 || 0) * 20) +
+    ((cashDenominations.p10 || 0) * 10) +
+    ((cashDenominations.p5 || 0) * 5) +
+    ((cashDenominations.p1 || 0) * 1) +
+    ((cashDenominations.c25 || 0) * 0.25)
+  );
+
+  const variance = totalCountedCash - expectedSales;
+
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   // Cart Handler Functions
   const handleAddToCart = (product) => {
@@ -177,7 +212,7 @@ export default function CashierPOS() {
       if (response.ok) {
         alert(`Transaction successful! PHP ${cartTotal.toFixed(2)} recorded to PostgreSQL.`);
         handleClearCart();
-        fetchProducts(); // Refresh product list to show updated stock counts
+        fetchProducts();
       } else {
         alert("Transaction failed to process.");
       }
@@ -187,31 +222,70 @@ export default function CashierPOS() {
     }
   };
 
-  // FEATURE 3: EOD Cash Denomination Totaling
-  const calculatePhysicalCash = () => {
-    return (
-      (cashDenominations.p1000 * 1000) +
-      (cashDenominations.p500 * 500) +
-      (cashDenominations.p200 * 200) +
-      (cashDenominations.p100 * 100) +
-      (cashDenominations.p50 * 50) +
-      (cashDenominations.p20 * 20) +
-      (cashDenominations.p10 * 10) +
-      (cashDenominations.p5 * 5) +
-      (cashDenominations.p1 * 1) +
-      (cashDenominations.c25 * 0.25)
-    );
+  // FEATURE 3: EOD RECONCILIATION API
+  const fetchExpectedCash = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/reconciliation/expected-cash');
+      if (res.ok) {
+        const data = await res.json();
+        setExpectedSales(data.expectedCash);
+      }
+    } catch (err) {
+      console.error('Failed to fetch expected cash:', err);
+    }
   };
 
-  const expectedSales = 15498.00; // Example system expected total
-  const totalCountedCash = calculatePhysicalCash();
-  const variance = totalCountedCash - expectedSales;
+  const handleExportReport = () => {
+    // Pass current component state into the utility function
+    exportCsv({
+      id: `EOD-${Date.now().toString().slice(-6)}`,
+      cashierId: 'CASHIER-1',
+      createdAt: new Date().toISOString(),
+      totalCountedCash: totalCountedCash || 0,
+      expectedSystemCash: expectedSales || 0,
+      variance: variance || 0,
+      notes: 'End of Shift Audit',
+    });
+  };
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const handleOpenEODModal = () => {
+    setShowEODModal(true);
+    fetchExpectedCash();
+  };
+
+  const handleSubmitReconciliation = async () => {
+    const payload = {
+      cashierId: 'CASHIER-1',
+      countedCash: totalCountedCash,
+      expectedCash: expectedSales,
+      variance: variance,
+      denominations: cashDenominations,
+      notes: 'End of Shift Audit',
+    };
+
+    try {
+      const res = await fetch('http://localhost:5000/api/reconciliation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const savedData = await res.json();
+        alert('Reconciliation saved successfully!');
+
+        // Export CSV automatically after successful submission
+        handleExportReport();
+
+        setShowEODModal(false);
+      } else {
+        alert('Failed to save reconciliation record.');
+      }
+    } catch (err) {
+      console.error('Submission error:', err);
+      alert('Server error connecting to database.');
+    }
+  };
 
   if (loading) {
     return (
@@ -225,7 +299,7 @@ export default function CashierPOS() {
     return (
       <div className="flex flex-col h-full w-full items-center justify-center bg-[#EAE8FE] gap-2">
         <p className="text-red-600 font-bold">Failed to load inventory: {error}</p>
-        <button onClick={fetchProducts} className="px-4 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-bold">
+        <button onClick={fetchProducts} className="px-4 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-bold cursor-pointer">
           Retry
         </button>
       </div>
@@ -234,11 +308,11 @@ export default function CashierPOS() {
 
   return (
     <div className="flex flex-col lg:flex-row h-full w-full bg-[#EAE8FE] p-4 gap-4 font-sans overflow-hidden box-border">
-      
+
       {/* LEFT SECTION: PRODUCT CATALOG */}
       <div className="flex-1 flex flex-col h-full min-h-0 bg-transparent">
-        
-        {/* Top Header Title & Action Buttons */}
+
+        {/* Top Header */}
         <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-sm">
@@ -254,11 +328,11 @@ export default function CashierPOS() {
             </div>
           </div>
 
-          {/* EOD & Pending Actions Header Toolbar */}
+          {/* EOD & Pending Actions Toolbar */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowPendingModal(true)}
-              className="relative px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+              className="relative px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             >
               <Clock className="w-4 h-4" />
               Pending
@@ -270,8 +344,8 @@ export default function CashierPOS() {
             </button>
 
             <button
-              onClick={() => setShowEODModal(true)}
-              className="px-3 py-1.5 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+              onClick={handleOpenEODModal}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             >
               <Banknote className="w-4 h-4" />
               End of Day
@@ -283,11 +357,10 @@ export default function CashierPOS() {
         <div className="flex flex-wrap items-center gap-2 mb-3 shrink-0">
           <button
             onClick={() => setSelectedCategory("All")}
-            className={`px-4 py-1.5 rounded-full font-medium shadow-sm transition-colors text-xs ${
-              selectedCategory === "All"
-                ? "bg-white text-gray-800 border border-gray-200"
-                : "bg-gray-200/70 text-gray-600 hover:bg-gray-200"
-            }`}
+            className={`px-4 py-1.5 rounded-full font-medium shadow-sm transition-colors text-xs cursor-pointer ${selectedCategory === "All"
+              ? "bg-white text-gray-800 border border-gray-200"
+              : "bg-gray-200/70 text-gray-600 hover:bg-gray-200"
+              }`}
           >
             All Products
           </button>
@@ -351,13 +424,13 @@ export default function CashierPOS() {
 
       {/* RIGHT SECTION: ORDER DETAILS */}
       <div className="w-full lg:w-80 xl:w-88 bg-[#FAF7F5] rounded-2xl p-4 flex flex-col h-full min-h-0 shadow-lg border border-gray-100 shrink-0">
-        
+
         <div className="flex justify-between items-center mb-2 shrink-0">
           <h2 className="text-base font-bold text-gray-900">Order Details</h2>
           <button
             onClick={handleHoldSale}
             disabled={cart.length === 0}
-            className="text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
+            className="text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Hold Sale
           </button>
@@ -386,16 +459,16 @@ export default function CashierPOS() {
                     PHP {(item.unitPrice * item.quantity).toFixed(2)}
                   </span>
                   <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-full border border-gray-200">
-                    <button onClick={() => handleUpdateQuantity(item.id, -1)} className="text-gray-600 hover:text-black p-0.5">
+                    <button onClick={() => handleUpdateQuantity(item.id, -1)} className="text-gray-600 hover:text-black p-0.5 cursor-pointer">
                       <Minus className="w-2.5 h-2.5" />
                     </button>
                     <span className="font-semibold text-[11px] px-0.5 min-w-[10px] text-center">
                       {item.quantity}
                     </span>
-                    <button onClick={() => handleUpdateQuantity(item.id, 1)} className="text-gray-600 hover:text-black p-0.5">
+                    <button onClick={() => handleUpdateQuantity(item.id, 1)} className="text-gray-600 hover:text-black p-0.5 cursor-pointer">
                       <Plus className="w-2.5 h-2.5" />
                     </button>
-                    <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 ml-0.5 p-0.5">
+                    <button onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 ml-0.5 p-0.5 cursor-pointer">
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
@@ -412,7 +485,6 @@ export default function CashierPOS() {
             <span>PHP {subtotal.toFixed(2)}</span>
           </div>
 
-          {/* Applied Discount Line */}
           {discountPercent > 0 && (
             <div className="flex justify-between items-center text-xs text-emerald-700 font-semibold">
               <span>Discount ({discountPercent}%):</span>
@@ -429,7 +501,7 @@ export default function CashierPOS() {
 
           <button
             onClick={() => setShowDiscountModal(true)}
-            className="w-full text-left text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1"
+            className="w-full text-left text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1 cursor-pointer"
           >
             <Percent className="w-3 h-3" />
             {discountPercent > 0 ? "Change Discount" : "Apply Supervisor Discount"}
@@ -445,16 +517,14 @@ export default function CashierPOS() {
             <label
               key={method}
               onClick={() => setPaymentMethod(method)}
-              className={`flex items-center gap-2 w-full p-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
-                paymentMethod === method
-                  ? "bg-white border-gray-400 shadow-sm text-gray-800"
-                  : "bg-white/60 border-transparent text-gray-500 hover:bg-white"
-              }`}
+              className={`flex items-center gap-2 w-full p-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${paymentMethod === method
+                ? "bg-white border-gray-400 shadow-sm text-gray-800"
+                : "bg-white/60 border-transparent text-gray-500 hover:bg-white"
+                }`}
             >
               <div
-                className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                  paymentMethod === method ? "border-gray-700 bg-gray-700" : "border-gray-300"
-                }`}
+                className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${paymentMethod === method ? "border-gray-700 bg-gray-700" : "border-gray-300"
+                  }`}
               >
                 {paymentMethod === method && <div className="w-1 h-1 rounded-full bg-white" />}
               </div>
@@ -467,14 +537,14 @@ export default function CashierPOS() {
         <div className="grid grid-cols-2 gap-2 shrink-0">
           <button
             onClick={handleClearCart}
-            className="py-2 bg-[#C2B8B3] hover:bg-[#b2a7a1] text-gray-800 text-xs font-bold rounded-lg transition-colors"
+            className="py-2 bg-[#C2B8B3] hover:bg-[#b2a7a1] text-gray-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
           >
             Clear
           </button>
           <button
             onClick={handleConfirmSale}
             disabled={cart.length === 0}
-            className="py-2 bg-[#B8ADA7] hover:bg-[#a89c96] text-gray-900 text-xs font-bold rounded-lg transition-colors shadow-sm disabled:opacity-50"
+            className="py-2 bg-[#B8ADA7] hover:bg-[#a89c96] text-gray-900 text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirm
           </button>
@@ -491,7 +561,7 @@ export default function CashierPOS() {
                 <Lock className="w-4 h-4 text-amber-600" />
                 Supervisor Approval
               </h3>
-              <button onClick={() => setShowDiscountModal(false)}>
+              <button onClick={() => setShowDiscountModal(false)} className="cursor-pointer">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
@@ -527,7 +597,7 @@ export default function CashierPOS() {
 
             <button
               onClick={handleApplyDiscount}
-              className="w-full py-2 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold transition-all"
+              className="w-full py-2 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
             >
               Authorize & Apply
             </button>
@@ -544,7 +614,7 @@ export default function CashierPOS() {
                 <Clock className="w-4 h-4 text-amber-600" />
                 Pending Sales Queue
               </h3>
-              <button onClick={() => setShowPendingModal(false)}>
+              <button onClick={() => setShowPendingModal(false)} className="cursor-pointer">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
@@ -562,7 +632,7 @@ export default function CashierPOS() {
                     </div>
                     <button
                       onClick={() => handleRestorePendingSale(item)}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs"
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs cursor-pointer"
                     >
                       Resume
                     </button>
@@ -576,21 +646,31 @@ export default function CashierPOS() {
 
       {/* --- MODAL 3: END OF DAY RECONCILIATION --- */}
       {showEODModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowEODModal(false)}
+        >
           <div className="bg-white rounded-2xl p-5 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+
+            {/* Header */}
             <div className="flex justify-between items-center border-b pb-2 shrink-0">
               <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
                 <Banknote className="w-4 h-4 text-emerald-700" />
                 End of Day Cash Reconciliation
               </h3>
-              <button onClick={() => setShowEODModal(false)}>
-                <X className="w-4 h-4 text-gray-500" />
+              <button
+                onClick={() => setShowEODModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 min-h-0">
               <p className="text-xs text-gray-500 font-medium">Input physical cash denomination quantities below:</p>
 
+              {/* DENOMINATIONS INPUT GRID */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
                   { label: "₱1000 Bill", key: "p1000" },
@@ -604,16 +684,16 @@ export default function CashierPOS() {
                   { label: "₱1 Coin", key: "p1" },
                   { label: "25¢ Coin", key: "c25" },
                 ].map((denom) => (
-                  <div key={denom.key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border">
+                  <div key={denom.key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="font-semibold text-gray-700">{denom.label}</span>
                     <input
                       type="number"
                       min="0"
-                      value={cashDenominations[denom.key]}
-                      onChange={(e) =>
-                        setCashDenominations({ ...cashDenominations, [denom.key]: Number(e.target.value) })
-                      }
-                      className="w-16 border rounded p-1 text-center font-bold text-gray-800"
+                      value={cashDenominations[denom.key] === 0 ? '' : cashDenominations[denom.key]}
+                      placeholder="0"
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => handleDenominationChange(denom.key, e.target.value)}
+                      className="w-16 border rounded p-1 text-center font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                     />
                   </div>
                 ))}
@@ -623,30 +703,45 @@ export default function CashierPOS() {
               <div className="p-3 bg-gray-100 rounded-xl space-y-1.5 text-xs">
                 <div className="flex justify-between font-medium text-gray-600">
                   <span>Counted Cash:</span>
-                  <span className="font-bold text-gray-800">PHP {totalCountedCash.toFixed(2)}</span>
+                  <span className="font-bold text-gray-800">
+                    PHP {totalCountedCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
                 <div className="flex justify-between font-medium text-gray-600">
                   <span>Expected System Cash:</span>
-                  <span className="font-bold text-gray-800">PHP {expectedSales.toFixed(2)}</span>
+                  <span className="font-bold text-gray-800">
+                    PHP {expectedSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
-                <div className="flex justify-between font-bold border-t pt-1 text-sm">
+                <div className="flex justify-between font-bold border-t border-gray-300 pt-1 text-sm">
                   <span>Variance:</span>
                   <span className={variance >= 0 ? "text-emerald-700" : "text-red-600"}>
-                    PHP {variance.toFixed(2)} {variance >= 0 ? "(Over)" : "(Short)"}
+                    PHP {Math.abs(variance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {variance >= 0 ? "(Over)" : "(Short)"}
                   </span>
                 </div>
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                alert(`Reconciliation submitted! Cash Variance: PHP ${variance.toFixed(2)}`);
-                setShowEODModal(false);
-              }}
-              className="w-full py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shrink-0"
-            >
-              Submit Reconciliation
-            </button>
+            {/* Footer Actions (Submit + Export CSV) */}
+            <div className="grid grid-cols-2 gap-2 shrink-0 pt-1 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => handleExportReport()}
+                className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export CSV
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitReconciliation}
+                className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                Submit Reconciliation
+              </button>
+            </div>
+
           </div>
         </div>
       )}
