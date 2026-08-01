@@ -66,13 +66,18 @@ app.get('/api/transactions', async (req, res) => {
 // --- RECONCILIATION ROUTES ---
 
 // Get Expected Cash for Today
+// Get Expected Cash for Today
 app.get('/api/reconciliation/expected-cash', async (req, res) => {
   try {
-    const expectedCash = await ReconciliationModel.getExpectedCashForToday();
-    res.json({ expectedCash });
+    const data = await ReconciliationModel.getExpectedCash();
+    return res.status(200).json(data);
   } catch (error) {
-    console.error('Error Fetching Expected Cash of EOD:', error);
-    res.status(500).json({ error: 'Failed to compute Expected Cash of EOD' });
+    console.error('Error calculating expected cash:', error);
+    return res.status(500).json({ 
+      error: 'Failed to calculate expected cash', 
+      expectedCash: 0, 
+      grossSales: 0 
+    });
   }
 });
 

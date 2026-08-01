@@ -6,49 +6,69 @@ datasource db {
   provider = "postgresql"
 }
 
+// ENUMS
+
+enum Role {
+  CASHIER
+  SUPERVISOR
+  ADMIN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  E_Wallet
+}
+
+enum ReconciliationStatus {
+  BALANCED
+  SHORTAGE
+  OVERAGE
+  COMPLETED
+}
+
+// MODELS
+
+model User {
+  id              Int              @id @default(autoincrement())
+  username        String           @unique
+  password        String
+  role            Role             @default(CASHIER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  transactions    Transaction[]
+  reconciliations Reconciliation[]
+}
+
 model Product {
-  id        Int      @id @default(autoincrement())
-  name      String
-  price     Float
-  category  String   @default("Uncategorized")
-  stock     Int      @default(0)
-  sku       String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  id               Int               @id @default(autoincrement())
+  name             String
+  price            Decimal           @db.Decimal(10, 2)
+  category         String            @default("Uncategorized")
+  stock            Int               @default(0)
+  sku              String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-model PendingOrder {
-  id               Int                @id @default(autoincrement())
-  orderReference   String             @unique
-  subtotal         Float
-  discountPercent  Float              @default(0)
-  total            Float
-  cashierId        String             @default("CASHIER-1")
-  createdAt        DateTime           @default(now())
-  items            PendingOrderItem[]
-}
-
-model PendingOrderItem {
-  id             Int          @id @default(autoincrement())
-  pendingOrderId Int
-  pendingOrder   PendingOrder @relation(fields: [pendingOrderId], references: [id], onDelete: Cascade)
-  productId      Int
-  name           String
-  unitPrice      Float
-  quantity       Int
+  transactionItems TransactionItem[]
 }
 
 model Transaction {
   id                   Int               @id @default(autoincrement())
   transactionNo        String            @unique
-  subtotal             Float
-  discountPercent      Float             @default(0)
-  discountAmount       Float             @default(0)
+  subtotal             Decimal           @db.Decimal(10, 2)
+  discountPercent      Decimal           @default(0) @db.Decimal(5, 2)
+  discountAmount       Decimal           @default(0) @db.Decimal(10, 2)
   supervisorAuthorized Boolean           @default(false)
-  totalAmount          Float
-  paymentMethod        String
-  cashierId            String            @default("CASHIER-1")
+  totalAmount          Decimal           @db.Decimal(10, 2)
+  paymentMethod        PaymentMethod     @default(CASH)
+
+  cashierId            Int
+  cashier              User              @relation(fields: [cashierId], references: [id])
+
   createdAt            DateTime          @default(now())
+
   items                TransactionItem[]
 }
 
@@ -56,35 +76,50 @@ model TransactionItem {
   id            Int         @id @default(autoincrement())
   transactionId Int
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
   productId     Int
+  product       Product     @relation(fields: [productId], references: [id])
+
   name          String
-  unitPrice     Float
+  unitPrice     Decimal     @db.Decimal(10, 2)
   quantity      Int
-  subtotal      Float
+  subtotal      Decimal     @db.Decimal(10, 2)
 }
 
 model Reconciliation {
-  id                 Int      @id @default(autoincrement())
-  reconciliationDate DateTime @default(now())
-  cashierId          String   @default("CASHIER-1")
-  
-  p1000              Int      @default(0)
-  p500               Int      @default(0)
-  p200               Int      @default(0)
-  p100               Int      @default(0)
-  p50                Int      @default(0)
-  p20                Int      @default(0)
-  p10                Int      @default(0)
-  p5                 Int      @default(0)
-  p1                 Int      @default(0)
-  c25                Int      @default(0)
+  id                 Int                  @id @default(autoincrement())
+  reportNo           String               @unique // e.g. X-Reading / Trans No
+  reconciliationDate DateTime             @default(now())
 
-  countedCash        Float    @default(0)
-  totalCountedCash   Float    @default(0)
-  expectedSystemCash Float    @default(0)
-  variance           Float    @default(0)
+  cashierId          Int
+  cashier            User                 @relation(fields: [cashierId], references: [id])
 
-  status             String   @default("COMPLETED")
-  notes              String?
-  createdAt          DateTime @default(now())
+  grossSales         Decimal              @default(0) @db.Decimal(10, 2)
+  pointsAvailed      Decimal              @default(0) @db.Decimal(10, 2)
+  totalDiscount      Decimal              @default(0) @db.Decimal(10, 2)
+  netSales           Decimal              @default(0) @db.Decimal(10, 2)
+  cashDiscount       Decimal              @default(0) @db.Decimal(10, 2)
+
+  p1000              Int                  @default(0)
+  p500               Int                  @default(0)
+  p200               Int                  @default(0)
+  p100               Int                  @default(0)
+  p50                Int                  @default(0)
+  p20                Int                  @default(0)
+  p10                Int                  @default(0)
+  p5                 Int                  @default(0)
+  p1                 Int                  @default(0)
+  p0_50              Int                  @default(0) // ₱0.50 coin
+  p0_25              Int                  @default(0) // ₱0.25 coin
+  p0_10              Int                  @default(0) // ₱0.10 coin
+  p0_05              Int                  @default(0) // ₱0.05 coin
+  p0_01              Int                  @default(0) // ₱0.01 coin
+
+  posCash            Decimal              @default(0) @db.Decimal(10, 2) // System Expected Cash
+  cashierCash        Decimal              @default(0) @db.Decimal(10, 2) // Total Counted Cash
+  shortOver          Decimal              @default(0) @db.Decimal(10, 2) // cashierCash - posCash
+
+  status             ReconciliationStatus @default(COMPLETED)
+  notes              String?              @db.Text
+  createdAt          DateTime             @default(now())
 }

@@ -28,12 +28,13 @@ export default function CashierPOS() {
   const [pendingSales, setPendingSales] = useState([]);
   const [showPendingModal, setShowPendingModal] = useState(false);
 
-  // FEATURE 3: End of Day Reconciliation States
+  // FEATURE 3: End of Day / X-Reading Reconciliation States
   const [showEODModal, setShowEODModal] = useState(false);
   const [expectedSales, setExpectedSales] = useState(0);
+  const [grossSalesTotal, setGrossSalesTotal] = useState(0);
   const [cashDenominations, setCashDenominations] = useState({
-    p1000: 0, p500: 0, p200: 0, p100: 0, p50: 0, p20: 0,
-    p10: 0, p5: 0, p1: 0, c25: 0
+    p1000: 0, p500: 0, p200: 0, p100: 0, p50: 0,
+    p20: 0, p10: 0, p5: 0, p1: 0, c25: 0
   });
 
   // Handler for Denomination Inputs
@@ -45,7 +46,7 @@ export default function CashierPOS() {
     }));
   };
 
-  // 1. FETCH PRODUCTS FROM POSTGRESQL BACKEND
+  // FETCH PRODUCTS FROM BACKEND
   const fetchProducts = () => {
     setLoading(true);
     fetch('http://localhost:5000/api/products')
@@ -64,13 +65,12 @@ export default function CashierPOS() {
       });
   };
 
-  // FETCH PRODUCTS ONLY ON LOAD
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  // DERIVED CALCULATIONS
-  const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  // DERIVED CALCULATIONS FOR CART
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item.unitPrice) * item.quantity), 0);
   const discountAmount = (subtotal * discountPercent) / 100;
   const cartTotal = Math.max(0, subtotal - discountAmount);
 
@@ -88,7 +88,7 @@ export default function CashierPOS() {
     ((cashDenominations.c25 || 0) * 0.25)
   );
 
-  const variance = totalCountedCash - expectedSales;
+  const shortOver = totalCountedCash - expectedSales;
 
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -114,7 +114,12 @@ export default function CashierPOS() {
           item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prevCart, { id: product.id, name: product.name, unitPrice: product.price, quantity: 1 }];
+      return [...prevCart, {
+        id: product.id,
+        name: product.name,
+        unitPrice: Number(product.price) || 0,
+        quantity: 1
+      }];
     });
   };
 
@@ -180,26 +185,32 @@ export default function CashierPOS() {
     setShowPendingModal(false);
   };
 
-  // 2. SUBMIT CONFIRMED TRANSACTION TO POSTGRESQL BACKEND
+  // SUBMIT CONFIRMED TRANSACTION TO BACKEND
   const handleConfirmSale = async () => {
     if (cart.length === 0) {
       alert("Cart is empty!");
       return;
     }
 
+    // Sanitize Enum value ("E-wallet" -> "E_WALLET")
+    const formattedPaymentMethod = paymentMethod
+      .toUpperCase()
+      .replace('-', '_')
+      .replace(' ', '_');
+
     const payload = {
       items: cart.map((item) => ({
         productId: item.id,
         name: item.name,
-        unitPrice: item.unitPrice,
+        unitPrice: Number(item.unitPrice),
         quantity: item.quantity,
       })),
       subtotal,
       discountPercent,
       discountAmount,
       totalAmount: cartTotal,
-      paymentMethod: paymentMethod.toUpperCase(),
-      cashierId: 'CASHIER-1',
+      paymentMethod: formattedPaymentMethod, // "CASH", "CARD", "E_WALLET"
+      cashierId: 1, // Must be integer for Prisma User relation
     };
 
     try {
@@ -210,11 +221,12 @@ export default function CashierPOS() {
       });
 
       if (response.ok) {
-        alert(`Transaction successful! PHP ${cartTotal.toFixed(2)} recorded to PostgreSQL.`);
+        alert(`Transaction successful! PHP ${cartTotal.toFixed(2)} recorded.`);
         handleClearCart();
         fetchProducts();
       } else {
-        alert("Transaction failed to process.");
+        const errorData = await response.json();
+        alert(`Transaction failed: ${errorData.message || 'Server error'}`);
       }
     } catch (err) {
       console.error('Checkout error:', err);
@@ -228,23 +240,49 @@ export default function CashierPOS() {
       const res = await fetch('http://localhost:5000/api/reconciliation/expected-cash');
       if (res.ok) {
         const data = await res.json();
-        setExpectedSales(data.expectedCash);
+
+        // Extract numeric value safely across various Prisma result formats
+        let rawVal = 0;
+        if (typeof data === 'number') {
+          rawVal = data;
+        } else if (typeof data.expectedCash === 'number') {
+          rawVal = data.expectedCash;
+        } else if (typeof data.expectedCash === 'object' && data.expectedCash !== null) {
+          // Unpacks Prisma aggregate objects like { _sum: { totalAmount: 1000 } }
+          rawVal = data.expectedCash._sum?.totalAmount || data.expectedCash._sum?.amount || 0;
+        } else if (data._sum) {
+          rawVal = data._sum.totalAmount || 0;
+        }
+
+        const numericVal = Number(rawVal) || 0;
+
+        setExpectedSales(numericVal);
+        setGrossSalesTotal(numericVal);
       }
     } catch (err) {
       console.error('Failed to fetch expected cash:', err);
+      setExpectedSales(0);
+      setGrossSalesTotal(0);
     }
   };
 
   const handleExportReport = () => {
-    // Pass current component state into the utility function
     exportCsv({
-      id: `EOD-${Date.now().toString().slice(-6)}`,
-      cashierId: 'CASHIER-1',
+      reportNo: `00${Math.floor(1000 + Math.random() * 9000)}`,
       createdAt: new Date().toISOString(),
-      totalCountedCash: totalCountedCash || 0,
-      expectedSystemCash: expectedSales || 0,
-      variance: variance || 0,
-      notes: 'End of Shift Audit',
+      cashier: { username: 'RACHELLE' },
+
+      grossSales: grossSalesTotal || expectedSales,
+      pointsAvailed: 0.00,
+      totalDiscount: discountAmount || 0,
+      netSales: expectedSales,
+
+      ...cashDenominations,
+
+      posCash: expectedSales,
+      cashDiscount: 0.00,
+      cashierCash: totalCountedCash,
+      shortOver: shortOver,
     });
   };
 
@@ -255,12 +293,16 @@ export default function CashierPOS() {
 
   const handleSubmitReconciliation = async () => {
     const payload = {
-      cashierId: 'CASHIER-1',
-      countedCash: totalCountedCash,
-      expectedCash: expectedSales,
-      variance: variance,
+      cashierId: 1,
+      grossSales: grossSalesTotal || expectedSales,
+      pointsAvailed: 0.00,
+      totalDiscount: discountAmount || 0,
+      netSales: expectedSales,
+      posCash: expectedSales,
+      cashDiscount: 0.00,
+      cashierCash: totalCountedCash,
+      shortOver: shortOver,
       denominations: cashDenominations,
-      notes: 'End of Shift Audit',
     };
 
     try {
@@ -271,12 +313,8 @@ export default function CashierPOS() {
       });
 
       if (res.ok) {
-        const savedData = await res.json();
         alert('Reconciliation saved successfully!');
-
-        // Export CSV automatically after successful submission
         handleExportReport();
-
         setShowEODModal(false);
       } else {
         alert('Failed to save reconciliation record.');
@@ -290,7 +328,7 @@ export default function CashierPOS() {
   if (loading) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-[#EAE8FE] font-bold text-gray-700">
-        Loading inventory from PostgreSQL...
+        Loading inventory...
       </div>
     );
   }
@@ -348,7 +386,7 @@ export default function CashierPOS() {
               className="px-3 py-1.5 bg-gray-800 hover:bg-black text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             >
               <Banknote className="w-4 h-4" />
-              End of Day
+              X-Reading / EOD
             </button>
           </div>
         </div>
@@ -409,7 +447,7 @@ export default function CashierPOS() {
                   <div className="truncate font-semibold">{product.name}</div>
                   <div className="flex justify-between items-center mt-0.5">
                     <span className="text-gray-600 font-bold">
-                      PHP {Number(product.price).toFixed(2)}
+                      PHP {Number(product.price || 0).toFixed(2)}
                     </span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
                       Stock: {product.stock}
@@ -450,13 +488,13 @@ export default function CashierPOS() {
                 <div>
                   <h4 className="font-semibold text-gray-800 text-xs">{item.name}</h4>
                   <span className="text-[11px] text-gray-500 font-medium">
-                    {item.unitPrice.toFixed(2)}
+                    {Number(item.unitPrice || 0).toFixed(2)}
                   </span>
                 </div>
 
                 <div className="text-right flex flex-col items-end gap-1">
                   <span className="font-bold text-xs text-gray-900">
-                    PHP {(item.unitPrice * item.quantity).toFixed(2)}
+                    PHP {(Number(item.unitPrice || 0) * item.quantity).toFixed(2)}
                   </span>
                   <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-full border border-gray-200">
                     <button onClick={() => handleUpdateQuantity(item.id, -1)} className="text-gray-600 hover:text-black p-0.5 cursor-pointer">
@@ -644,7 +682,7 @@ export default function CashierPOS() {
         </div>
       )}
 
-      {/* --- MODAL 3: END OF DAY RECONCILIATION --- */}
+      {/* --- MODAL 3: END OF DAY / X-READING RECONCILIATION --- */}
       {showEODModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
@@ -656,7 +694,7 @@ export default function CashierPOS() {
             <div className="flex justify-between items-center border-b pb-2 shrink-0">
               <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
                 <Banknote className="w-4 h-4 text-emerald-700" />
-                End of Day Cash Reconciliation
+                X-Reading / Cashier Accountability
               </h3>
               <button
                 onClick={() => setShowEODModal(false)}
@@ -668,21 +706,21 @@ export default function CashierPOS() {
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-2 min-h-0">
-              <p className="text-xs text-gray-500 font-medium">Input physical cash denomination quantities below:</p>
+              <p className="text-xs text-gray-500 font-medium">Input physical cash denomination quantities:</p>
 
               {/* DENOMINATIONS INPUT GRID */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
-                  { label: "₱1000 Bill", key: "p1000" },
-                  { label: "₱500 Bill", key: "p500" },
-                  { label: "₱200 Bill", key: "p200" },
-                  { label: "₱100 Bill", key: "p100" },
-                  { label: "₱50 Bill", key: "p50" },
-                  { label: "₱20 Bill", key: "p20" },
-                  { label: "₱10 Coin", key: "p10" },
-                  { label: "₱5 Coin", key: "p5" },
-                  { label: "₱1 Coin", key: "p1" },
-                  { label: "25¢ Coin", key: "c25" },
+                  { label: "₱1,000.00 Note", key: "p1000" },
+                  { label: "₱500.00 Note", key: "p500" },
+                  { label: "₱200.00 Note", key: "p200" },
+                  { label: "₱100.00 Note", key: "p100" },
+                  { label: "₱50.00 Note", key: "p50" },
+                  { label: "₱20.00 Note", key: "p20" },
+                  { label: "₱10.00 Coin", key: "p10" },
+                  { label: "₱5.00 Coin", key: "p5" },
+                  { label: "₱1.00 Coin", key: "p1" },
+                  { label: "₱0.25 Coin", key: "c25" },
                 ].map((denom) => (
                   <div key={denom.key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="font-semibold text-gray-700">{denom.label}</span>
@@ -702,35 +740,35 @@ export default function CashierPOS() {
               {/* Reconciliation Audit Box */}
               <div className="p-3 bg-gray-100 rounded-xl space-y-1.5 text-xs">
                 <div className="flex justify-between font-medium text-gray-600">
-                  <span>Counted Cash:</span>
+                  <span>Cashier Cash (Counted):</span>
                   <span className="font-bold text-gray-800">
                     PHP {totalCountedCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between font-medium text-gray-600">
-                  <span>Expected System Cash:</span>
+                  <span>POS Cash (Expected):</span>
                   <span className="font-bold text-gray-800">
                     PHP {expectedSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between font-bold border-t border-gray-300 pt-1 text-sm">
-                  <span>Variance:</span>
-                  <span className={variance >= 0 ? "text-emerald-700" : "text-red-600"}>
-                    PHP {Math.abs(variance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {variance >= 0 ? "(Over)" : "(Short)"}
+                  <span>Short / Over:</span>
+                  <span className={shortOver < 0 ? "text-red-600" : shortOver > 0 ? "text-emerald-700" : "text-gray-800"}>
+                    PHP {shortOver.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Footer Actions (Submit + Export CSV) */}
+            {/* Footer Actions */}
             <div className="grid grid-cols-2 gap-2 shrink-0 pt-1 border-t border-gray-100">
               <button
                 type="button"
-                onClick={() => handleExportReport()}
+                onClick={handleExportReport}
                 className="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <Download className="w-3.5 h-3.5" />
-                Export CSV
+                Export X-Reading
               </button>
 
               <button

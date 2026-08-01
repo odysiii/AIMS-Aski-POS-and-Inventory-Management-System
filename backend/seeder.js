@@ -3,11 +3,26 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
 
-// Setup the PostgreSQL connection pool and adapter for Prisma 7
+// Setup PostgreSQL connection pool and adapter
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+const INITIAL_USERS = [
+  {
+    id: 1,
+    username: 'cashier1',
+    password: 'password123', // Replace with hashed password if using bcrypt later
+    role: 'CASHIER',
+  },
+  {
+    id: 2,
+    username: 'admin',
+    password: 'adminpassword',
+    role: 'ADMIN',
+  },
+];
 
 const INITIAL_PRODUCTS = [
   { name: "Lettuce Seed", price: 349.00, category: "Seeds", stock: 50, sku: "SEED-001" },
@@ -26,16 +41,29 @@ const INITIAL_PRODUCTS = [
 
 async function seedData() {
   try {
-    // Clear existing products
-    await prisma.product.deleteMany();
-    console.log('Existing products cleared...');
+    console.log('Cleaning up old database records...');
 
-    // Seed new products
+    // 1. Delete dependent tables first to avoid FK constraint errors
+    await prisma.transactionItem.deleteMany();
+    await prisma.reconciliation.deleteMany();
+    await prisma.transaction.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.user.deleteMany();
+
+    console.log('Database cleared.');
+
+    // 2. Seed Users
+    await prisma.user.createMany({
+      data: INITIAL_USERS,
+    });
+    console.log('Users seeded (Cashier ID: 1 created).');
+
+    // 3. Seed Products
     await prisma.product.createMany({
       data: INITIAL_PRODUCTS,
     });
+    console.log('Initial POS products successfully seeded!');
 
-    console.log('Initial POS products successfully seeded to PostgreSQL!');
   } catch (error) {
     console.error('Error seeding data:', error);
   } finally {
