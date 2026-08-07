@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import {useNavigate, useLocation} from 'react-router-dom';
 import { 
   Home, 
   Package, 
@@ -10,7 +11,8 @@ import {
   Banknote, 
   AlertTriangle, 
   Menu,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Form
 } from 'lucide-react';
 import {
   AreaChart,
@@ -73,6 +75,9 @@ const expiryWatchlist = [
 export default function Dashboard() {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   return (
     <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none">
       
@@ -99,31 +104,40 @@ export default function Dashboard() {
               }`}
             >
               <Menu className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Collapse</span>}
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Menu</span>}
             </button>
 
-            <button className={`p-2 bg-[#C0C0C0] text-gray-800 rounded-xl md:rounded-2xl shadow-sm flex items-center ${
+            {/*Home button */}
+            <button type="button" onClick={() => navigate('/adminDashboard')}
+            className={`p-2 ${location.pathname === '/adminDashboard' ? 'bg-[#C0C0C0] text-gray-800' : 'text-gray-500 hover:text-black hover:bg-gray-200'}
+             rounded-xl md:rounded-2xl shadow-sm flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Home className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold whitespace-nowrap">Home</span>}
             </button>
 
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+            {/*Inventory button */}
+            <button type="button" onClick={() => navigate('/inventoryList')}
+            className={`p-2 ${location.pathname === '/inventoryList' ? 'bg-[#C0C0C0] text-gray-800' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Package className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Inventory</span>}
             </button>
 
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+            {/*Forecast button */}
+            <button type="button" onClick={() => navigate('/demand')}
+            className={`p-2 ${location.pathname === '/demand' ? 'bg-[#C0C0C0] text-gray-800' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <TrendingUp className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Forecast</span>}
             </button>
 
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+            {/*Analytics button */}
+            <button type="button" onClick={() => navigate('/analytics')}
+            className={`p-2 ${location.pathname === '/analytics' ? 'bg-[#C0C0C0] text-gray-800' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <BarChart2 className="w-5 h-5 shrink-0" />
@@ -133,14 +147,19 @@ export default function Dashboard() {
 
           {/* Bottom Nav Group */}
           <div className="flex md:flex-col items-center gap-2 w-full justify-end">
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+            
+            {/* Settings button */}
+            <button type="button" onClick={() => navigate('/settings')}
+            className={`p-2 ${location.pathname === '/settings' ? 'bg-[#C0C0C0] text-gray-800' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Settings className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Settings</span>}
             </button>
 
-            <button className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
+            {/* Logout button */} 
+            <button type="button" onClick={() => navigate('/login')}
+            className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <LogOut className="w-5 h-5 shrink-0" />
