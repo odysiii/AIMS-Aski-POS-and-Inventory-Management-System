@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Home, 
   Package, 
+  TrendingUp, 
   BarChart2, 
   Menu, 
   Settings, 
@@ -115,49 +117,137 @@ const futureData = {
 
 export default function DemandForecast() {
   const [activeTab, setActiveTab] = useState('Future'); // 'Current' or 'Future'
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Router hooks for dynamic active state and navigation
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Navigation handlers
+  const handleNavigate = (path) => {
+    navigate(path);
+  };
+
+  const handleLogout = () => {
+    navigate('/login');
+  };
+
+  const toggleSidebar = () => {
+    setIsExpanded((prev) => !prev);
+  };
 
   // Pick dataset based on active tab
   const activeData = activeTab === 'Current' ? currentData : futureData;
 
   return (
-    <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none p-2 sm:p-4">
+    <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none">
       
+      {/* Top Header Breadcrumb */}
+      <div className="pt-2 pl-3 sm:pl-4 text-gray-500 font-semibold text-[10px] sm:text-xs tracking-wider uppercase z-20 shrink-0">
+        AIMS - IM - ADMIN - FORECAST
+      </div>
+
       {/* Main App Box */}
-      <div className="relative flex-1 rounded-2xl overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0">
+      <div className="relative flex-1 m-2 sm:m-3 md:m-4 mt-1 rounded-2xl overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0">
         
-        {/* SIDEBAR NAVIGATION */}
-        <div className="bg-[#EDEDED] rounded-2xl flex md:flex-col justify-between p-2 md:py-6 md:px-3 shrink-0 border border-white/60 shadow-xs md:w-16 items-center">
-          <div className="flex md:flex-col items-center gap-4 w-full">
-            <button className="p-2 text-gray-600 hover:bg-gray-200 rounded-xl transition-all">
-              <Menu className="w-5 h-5" />
+        {/* COLLAPSIBLE SIDEBAR */}
+        <div 
+          className={`bg-[#EDEDED] rounded-2xl flex md:flex-col justify-between p-2 md:py-4 shrink-0 shadow-sm border border-white/60 transition-all duration-300 ease-in-out ${
+            isExpanded ? 'md:w-48 md:px-3' : 'md:w-16 items-center'
+          }`}
+        >
+          {/* Top Nav Group */}
+          <div className="flex md:flex-col items-center gap-2 md:gap-3 w-full">
+            <button 
+              type="button"
+              onClick={toggleSidebar}
+              className={`p-2 text-gray-600 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-2.5' : 'justify-center'
+              }`}
+            >
+              <Menu className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Menu</span>}
             </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Home className="w-5 h-5" />
+
+            {/* Home button */}
+            <button 
+              type="button" 
+              onClick={() => handleNavigate('/adminDashboard')}
+              className={`p-2 ${location.pathname === '/adminDashboard' ? 'text-black bg-gray-200' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <Home className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold whitespace-nowrap">Home</span>}
             </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Package className="w-5 h-5" />
+
+            {/* Inventory button */}
+            <button 
+              type="button" 
+              onClick={() => handleNavigate('/inventoryList')}
+              className={`p-2 ${location.pathname === '/inventoryList' ? 'text-black bg-gray-200' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <Package className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Inventory</span>}
             </button>
-            {/* Active Demand Analytics Tab */}
-            <button className="p-2 bg-[#C0C0C0] text-gray-800 rounded-xl shadow-xs">
-              <BarChart2 className="w-5 h-5" />
+
+            {/* Forecast button */}
+            <button 
+              type="button"
+              onClick={() => handleNavigate('/demand')}
+              className={`p-2 ${location.pathname === '/demand' || location.pathname === '/demand' ? 'text-black bg-gray-200' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <TrendingUp className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Forecast</span>}
             </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Menu className="w-5 h-5" />
+
+            {/* Analytics button */}
+            <button 
+              type="button"
+              onClick={() => handleNavigate('/analytics')}
+              className={`p-2 ${location.pathname === '/analytics' ? 'text-black bg-gray-200' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <BarChart2 className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Analytics</span>}
             </button>
           </div>
 
-          <div className="flex md:flex-col items-center gap-3 w-full">
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Settings className="w-5 h-5" />
+          {/* Bottom Nav Group */}
+          <div className="flex md:flex-col items-center gap-2 w-full justify-end">
+            {/* Settings button */}
+            <button 
+              type="button"
+              onClick={() => handleNavigate('/settings')}
+              className={`p-2 ${location.pathname === '/settings' ? 'text-black bg-gray-200' : 'text-gray-500 hover:text-black hover:bg-gray-200'} rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <Settings className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Settings</span>}
             </button>
-            <button className="p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all">
-              <LogOut className="w-5 h-5" />
+
+            {/* Logout button */}
+            <button 
+              type="button"
+              onClick={handleLogout}
+              className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
+                isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+              }`}
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-red-600 whitespace-nowrap">Logout</span>}
             </button>
           </div>
         </div>
 
         {/* MAIN PANEL */}
-        <div className="flex-1 bg-[#EDEDED] rounded-2xl p-3 sm:p-5 flex flex-col gap-3 overflow-y-auto border border-white/60 shadow-xs min-h-0">
+        <div className="flex-1 bg-[#EDEDED] rounded-2xl p-3 sm:p-4 flex flex-col gap-3 overflow-y-auto border border-white/60 shadow-sm min-h-0">
           
           {/* HEADER BAR */}
           <div className="flex items-center justify-between shrink-0 mb-1">
@@ -171,13 +261,21 @@ export default function DemandForecast() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button className="p-1.5 text-gray-700 hover:bg-gray-300/60 rounded-full transition-all">
+              <button 
+                type="button"
+                onClick={() => handleNavigate('/notifications')}
+                className="p-1.5 text-gray-700 hover:bg-gray-300/60 rounded-full transition-all"
+              >
                 <Bell className="w-4 h-4" />
               </button>
               <span className="text-xs font-black text-gray-800 hidden sm:inline">Hi, Admin!</span>
-              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center border border-gray-400/40">
+              <button
+                type="button"
+                onClick={() => handleNavigate('/profile')}
+                className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center border border-gray-400/40 hover:opacity-80 transition-opacity"
+              >
                 <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
+              </button>
             </div>
           </div>
 
@@ -193,6 +291,7 @@ export default function DemandForecast() {
               <div className="flex justify-center items-center gap-12 sm:gap-20 text-xs sm:text-sm font-bold">
                 {/* Current Tab */}
                 <button
+                  type="button"
                   onClick={() => setActiveTab('Current')}
                   className={`relative pb-2 transition-all cursor-pointer ${
                     activeTab === 'Current' 
@@ -208,6 +307,7 @@ export default function DemandForecast() {
 
                 {/* Future Tab */}
                 <button
+                  type="button"
                   onClick={() => setActiveTab('Future')}
                   className={`relative pb-2 transition-all cursor-pointer ${
                     activeTab === 'Future' 

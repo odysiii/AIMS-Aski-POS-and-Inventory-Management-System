@@ -1,3 +1,4 @@
+import { useNavigate, useLocation } from 'react-router-dom';
 import React, { useState, useMemo } from 'react';
 import { 
   Home, 
@@ -54,6 +55,9 @@ const initialProducts = [
 ];
 
 export default function InventoryList() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInputFormOpen, setIsInputFormOpen] = useState(true);
 
@@ -160,32 +164,44 @@ export default function InventoryList() {
               }`}
             >
               <Menu className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Collapse</span>}
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Menu</span>}
             </button>
 
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+          {/*HOME BUTTON -> /adminDashboard */} 
+            <button type="button" onClick={() => navigate('/adminDashboard')}
+            className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+              location.pathname === '/adminDashboard'} 
+              ${isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Home className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold whitespace-nowrap">Home</span>}
             </button>
 
-            <button type="button" className={`p-2 bg-[#C0C0C0] text-gray-800 rounded-xl md:rounded-2xl shadow-sm flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+            {/*INVENTORY BUTTON -> /inventoryList */}
+            <button type="button" onClick={() => navigate('/inventoryList')}
+            className={`p-2 bg-[#C0C0C0] text-gray-800 rounded-xl md:rounded-2xl shadow-sm flex items-center ${
+              location.pathname === 'inventoryList'}
+              ${isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Package className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-800 whitespace-nowrap">Inventory</span>}
             </button>
 
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+            {/*FORECAST BUTTON -> /demand */}
+            <button type="button" onClick={() => navigate('/demand')}
+            className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+              location.pathname === '/demand'} 
+              ${isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <TrendingUp className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Forecast</span>}
             </button>
 
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+            {/*Analytics Button -> /accounting */}
+            <button type="button" onClick={() => navigate('/accounting')}
+            className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+              location.pathname === '/accounting'}
+              ${isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <BarChart2 className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Analytics</span>}
@@ -194,14 +210,18 @@ export default function InventoryList() {
 
           {/* Bottom Nav Group */}
           <div className="flex md:flex-col items-center gap-2 w-full justify-end">
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
+            <button type="button" onClick={() => navigate('/pos')}
+             className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
+              location.pathname === '/pos'}
+              ${isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <Settings className="w-5 h-5 shrink-0" />
               {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Settings</span>}
             </button>
 
-            <button type="button" className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
+            {/*LOGOUT BUTTON -> / */}
+            <button type="button" onClick={() => navigate('/')}
+            className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
               isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
             }`}>
               <LogOut className="w-5 h-5 shrink-0" />
