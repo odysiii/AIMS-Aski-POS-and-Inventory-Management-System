@@ -345,7 +345,8 @@ export default function CashierPOS() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-full w-full bg-[#EAE8FE] p-4 gap-4 font-sans overflow-hidden box-border">
+    // MAIN CONTAINER
+    <div className="flex flex-col lg:flex-row h-full w-full bg-[#EBF0F6] p-4 gap-4 font-sans overflow-hidden box-border">
 
       {/* LEFT SECTION: PRODUCT CATALOG */}
       <div className="flex-1 flex flex-col h-full min-h-0 bg-transparent">
@@ -354,7 +355,7 @@ export default function CashierPOS() {
         <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white shrink-0 shadow-sm">
-              <Store className="w-5 h-5" />
+              <img src="/aski_logo.png" alt="Logo" className="w-6 h-6" />
             </div>
             <div>
               <h1 className="text-base font-extrabold text-gray-800 uppercase tracking-wide leading-tight">

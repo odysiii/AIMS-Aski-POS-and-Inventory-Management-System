@@ -164,7 +164,7 @@ export default function InventoryList() {
               }`}
             >
               <Menu className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Collapse</span>}
+              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Menu</span>}
             </button>
 
           {/*HOME BUTTON -> /adminDashboard */} 
