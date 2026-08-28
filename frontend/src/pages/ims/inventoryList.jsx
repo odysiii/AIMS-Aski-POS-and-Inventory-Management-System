@@ -1,20 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Home, 
-  Package, 
-  TrendingUp, 
-  BarChart2, 
-  Settings, 
-  LogOut, 
+  Package,
   Bell, 
-  Menu,
-  Image as ImageIcon,
   X,
   Search,
   Calendar,
   ChevronDown,
   Plus
 } from 'lucide-react';
+import NotificationPanel from './NotificationPanel';
 
 // --- Sample Product Data ---
 const initialProducts = [
@@ -54,8 +49,8 @@ const initialProducts = [
 ];
 
 export default function InventoryList() {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isInputFormOpen, setIsInputFormOpen] = useState(true);
+  const [isInputFormOpen, setIsInputFormOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -80,21 +75,13 @@ export default function InventoryList() {
   // Dynamic Filtering Logic
   const filteredProducts = useMemo(() => {
     return initialProducts.filter((prod) => {
-      // 1. Search Query (Name or Category)
       const matchesSearch = 
         prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         prod.category.toLowerCase().includes(searchQuery.toLowerCase());
 
-      // 2. Category Filter
       const matchesCategory = filterCategory ? prod.category === filterCategory : true;
-
-      // 3. Stock Status Filter
       const matchesStock = filterStock ? prod.status === filterStock : true;
-
-      // 4. Batch Date Filter
       const matchesBatchDate = filterBatchDate ? prod.batchDate.includes(filterBatchDate) : true;
-
-      // 5. Expiration Date Filter
       const matchesExpDate = filterExpDate ? prod.expirationDate.includes(filterExpDate) : true;
 
       return matchesSearch && matchesCategory && matchesStock && matchesBatchDate && matchesExpDate;
@@ -133,410 +120,330 @@ export default function InventoryList() {
     handleClearForm();
   };
 
-  return (
-    <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none">
-      
-      {/* Top Header Breadcrumb */}
-      <div className="pt-2 pl-3 sm:pl-4 text-gray-500 font-semibold text-[10px] sm:text-xs tracking-wider uppercase z-20 shrink-0">
-        AIMS - IM - ADMIN - INVENTORY
-      </div>
+  const toggleInputForm = () => {
+    setIsInputFormOpen(!isInputFormOpen);
+  };
 
-      {/* Main Container Wrapper */}
-      <div className="relative flex-1 m-2 sm:m-3 md:m-4 mt-1 rounded-2xl overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0">
+  
+  return (
+    <>
         
-        {/* COLLAPSIBLE SIDEBAR */}
-        <div 
-          className={`bg-[#EDEDED] rounded-2xl flex md:flex-col justify-between p-2 md:py-4 shrink-0 shadow-sm border border-white/60 transition-all duration-300 ease-in-out ${
-            isExpanded ? 'md:w-48 md:px-3' : 'md:w-16 items-center'
-          }`}
-        >
-          {/* Top Nav Group */}
-          <div className="flex md:flex-col items-center gap-2 md:gap-3 w-full">
+        {/* HEADER */}
+        <header className="relative flex items-center justify-between bg-gradient-to-r from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10 shrink-0 sticky top-0 z-30">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+              <Package className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">AMPC</p>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+                INVENTORY
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
             <button 
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={`p-2 text-gray-600 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-                isExpanded ? 'w-full justify-start gap-3 px-2.5' : 'justify-center'
+              onClick={() => setIsInputFormOpen(!isInputFormOpen)}
+              className={`flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-2xl shadow-md transition-all cursor-pointer ${
+                isInputFormOpen
+                  ? 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-blue-500/20'
               }`}
             >
-              <Menu className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Collapse</span>}
+              {isInputFormOpen ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              <span>{isInputFormOpen ? 'Close Form' : 'Add Product'}</span>
             </button>
 
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Home className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold whitespace-nowrap">Home</span>}
-            </button>
-
-            <button type="button" className={`p-2 bg-[#C0C0C0] text-gray-800 rounded-xl md:rounded-2xl shadow-sm flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Package className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-800 whitespace-nowrap">Inventory</span>}
-            </button>
-
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <TrendingUp className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Forecast</span>}
-            </button>
-
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <BarChart2 className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Analytics</span>}
-            </button>
-          </div>
-
-          {/* Bottom Nav Group */}
-          <div className="flex md:flex-col items-center gap-2 w-full justify-end">
-            <button type="button" className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Settings className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Settings</span>}
-            </button>
-
-            <button type="button" className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <LogOut className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-red-600 whitespace-nowrap">Logout</span>}
-            </button>
-          </div>
-        </div>
-
-        {/* MAIN INVENTORY CONTENT AREA */}
-        <div className="flex-1 bg-[#EDEDED] rounded-2xl p-3 sm:p-4 flex flex-col gap-3 overflow-y-auto border border-white/60 shadow-sm min-h-0">
-          
-          {/* TOP BAR */}
-          <div className="flex items-center justify-between shrink-0 mb-1 gap-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gray-300 flex items-center justify-center border border-gray-400/40 shrink-0">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
-              <h1 className="text-xs sm:text-sm md:text-base font-black text-black tracking-wide uppercase truncate">
-                INVENTORY MANAGEMENT
-              </h1>
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <button type="button" className="p-1.5 sm:p-2 text-gray-700 hover:bg-gray-300/60 rounded-full transition-all cursor-pointer">
-                <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="relative">
+              <button 
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+              >
+                <Bell className="w-5 h-5 text-slate-700" />
+                <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
               </button>
-              <span className="text-[11px] sm:text-xs font-black text-gray-800 hidden sm:inline">Hi, Admin!</span>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gray-300 flex items-center justify-center border border-gray-400/40 shrink-0">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
+
+              <NotificationPanel 
+                isOpen={isNotifOpen} 
+                onClose={() => setIsNotifOpen(false)} 
+              />
             </div>
-          </div>
+          </div> 
+        </header>
 
-          {/* PAGE TITLE & COLLAPSE TOGGLE BUTTON */}
-          <div className="flex items-center justify-between shrink-0 px-1">
-            <h2 className="text-sm sm:text-base font-black text-black tracking-wider uppercase">
-              INVENTORY
-            </h2>
-            <button 
-              type="button" 
-              onClick={() => setIsInputFormOpen(!isInputFormOpen)}
-              title={isInputFormOpen ? "Collapse Input Form" : "Expand Input Form"}
-              className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm text-gray-700 hover:bg-gray-200 hover:text-black transition-all cursor-pointer"
-            >
-              {isInputFormOpen ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-            </button>
-          </div>
-
-          {/* SECTION 1: INPUT PRODUCTS FORM (Collapsible) */}
-          <div 
-            className={`transition-all duration-300 ease-in-out overflow-hidden shrink-0 ${
-              isInputFormOpen 
-                ? 'max-h-[1000px] opacity-100 mb-0' 
-                : 'max-h-0 opacity-0 -mb-3 pointer-events-none'
-            }`}
-          >
-            <div className="bg-[#F5F5F5] rounded-2xl p-3 sm:p-4 shadow-xs border border-gray-200/80">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs sm:text-sm font-black text-black uppercase tracking-wide">
-                  INPUT PRODUCTS
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button 
-                    type="button"
-                    onClick={handleClearForm}
-                    className="px-4 py-1.5 bg-[#D4D4D4] hover:bg-[#C2C2C2] text-black font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={handleAddProduct}
-                    className="px-4 py-1.5 bg-[#D4D4D4] hover:bg-[#C2C2C2] text-black font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Add Product
-                  </button>
-                </div>
-              </div>
-
-              {/* FORM INPUT GRID */}
-              <form onSubmit={handleAddProduct} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-left">
-                
-                <div className="md:col-span-2">
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Product Name</label>
-                  <input 
-                    type="text"
-                    name="productName"
-                    value={formData.productName}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Batch No.</label>
-                  <input 
-                    type="text"
-                    name="batchNo"
-                    value={formData.batchNo}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Quantity</label>
-                  <input 
-                    type="number"
-                    name="quantity"
-                    value={formData.quantity}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Arrival Date</label>
-                  <div className="relative flex items-center">
-                    <input 
-                      type="date"
-                      name="arrivalDate"
-                      value={formData.arrivalDate}
-                      onChange={handleInputChange}
-                      className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 appearance-none"
-                    />
-                    <Calendar className="w-3.5 h-3.5 text-gray-500 absolute right-3 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="md:col-span-1">
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Expiration Date</label>
-                  <div className="relative flex items-center">
-                    <input 
-                      type="date"
-                      name="expirationDate"
-                      value={formData.expirationDate}
-                      onChange={handleInputChange}
-                      className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 appearance-none"
-                    />
-                    <Calendar className="w-3.5 h-3.5 text-gray-500 absolute right-3 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="md:col-span-1">
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Category</label>
-                  <div className="relative flex items-center">
-                    <select 
-                      name="category"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                      className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400 appearance-none"
-                    >
-                      <option value=""></option>
-                      <option value="Category 1">Category 1</option>
-                      <option value="Category 2">Category 2</option>
-                      <option value="Category 3">Category 3</option>
-                      <option value="Category 4">Category 4</option>
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-3 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Unit Cost</label>
-                  <input 
-                    type="text"
-                    name="unitCost"
-                    value={formData.unitCost}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Selling Price</label>
-                  <input 
-                    type="text"
-                    name="sellingPrice"
-                    value={formData.sellingPrice}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-                <div className="md:col-span-1">
-                  <label className="block text-[10px] font-bold text-gray-700 mb-1">Reorder Level</label>
-                  <input 
-                    type="number"
-                    name="reorderLevel"
-                    value={formData.reorderLevel}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                </div>
-
-              </form>
-            </div>
-          </div>
-
-          {/* SECTION 2: PRODUCT LIST & SEARCH */}
-          <div className="bg-[#F5F5F5] rounded-2xl p-3 sm:p-4 shadow-xs border border-gray-200/80 flex-1 flex flex-col min-h-[250px]">
-            
-            {/* Header + Search Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <h3 className="text-xs sm:text-sm font-black text-black uppercase tracking-wide">
-                PRODUCT LIST
+        {/* SECTION 1: INPUT PRODUCTS */}
+        {isInputFormOpen && (
+          <div className="bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900 backdrop-blur-xl rounded-3xl p-5 shadow-xl shadow-blue-950/20 border border-blue-800/40 transition-all animate-fadeIn text-white shrink-0">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-wide">
+                INPUT PRODUCTS
               </h3>
-
-              {/* Search Bar */}
-              <div className="relative flex items-center w-full sm:w-64">
-                <Search className="w-4 h-4 text-gray-500 absolute left-3 pointer-events-none" />
-                <input 
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search"
-                  className="w-full bg-[#E2E2E2] rounded-full pl-9 pr-4 py-1.5 text-xs text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400"
-                />
-              </div>
-            </div>
-
-            {/* Filters Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 mb-1">Category</label>
-                <div className="relative flex items-center">
-                  <select 
-                    value={filterCategory}
-                    onChange={(e) => setFilterCategory(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none appearance-none"
-                  >
-                    <option value="">All Categories</option>
-                    <option value="Category 1">Category 1</option>
-                    <option value="Category 3">Category 3</option>
-                    <option value="Category 4">Category 4</option>
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-3 pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 mb-1">Stock</label>
-                <div className="relative flex items-center">
-                  <select 
-                    value={filterStock}
-                    onChange={(e) => setFilterStock(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none appearance-none"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="In Stock">In Stock</option>
-                    <option value="Low Stock">Low Stock</option>
-                    <option value="Expired">Expired</option>
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-3 pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 mb-1">Batch Date</label>
-                <input 
-                  type="text"
-                  placeholder="e.g. 2026"
-                  value={filterBatchDate}
-                  onChange={(e) => setFilterBatchDate(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 mb-1">Expiration Date</label>
-                <input 
-                  type="text"
-                  placeholder="e.g. 2028"
-                  value={filterExpDate}
-                  onChange={(e) => setFilterExpDate(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs text-gray-800 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-end">
+              <div className="flex items-center gap-2">
                 <button 
                   type="button"
-                  onClick={handleClearFilters}
-                  className="w-full py-1.5 bg-[#D4D4D4] hover:bg-[#C2C2C2] text-black font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  onClick={handleClearForm}
+                  className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
                 >
                   Clear
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleAddProduct}
+                  className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-blue-500/30 cursor-pointer"
+                >
+                  Add Product
                 </button>
               </div>
             </div>
 
-            {/* PRODUCT DATA TABLE */}
-            <div className="flex-1 overflow-x-auto rounded-xl border border-gray-300">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-[#C1B2B0] text-gray-800 font-bold">
-                    <th className="p-2.5">Product Name</th>
-                    <th className="p-2.5">Category</th>
-                    <th className="p-2.5 text-center">Current Stock</th>
-                    <th className="p-2.5 text-center">Unit Cost</th>
-                    <th className="p-2.5 text-center">Selling Price</th>
-                    <th className="p-2.5 text-center">Batch Date</th>
-                    <th className="p-2.5 text-center">Expiration Date</th>
-                    <th className="p-2.5 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-[#EAEAEA] font-medium text-gray-800">
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.map((prod) => (
-                      <tr key={prod.id} className="hover:bg-gray-300/40 transition-colors">
-                        <td className="p-2.5 font-semibold">{prod.name}</td>
-                        <td className="p-2.5">{prod.category}</td>
-                        <td className="p-2.5 text-center font-bold">{prod.currentStock}</td>
-                        <td className="p-2.5 text-center">{prod.unitCost}</td>
-                        <td className="p-2.5 text-center">{prod.sellingPrice}</td>
-                        <td className="p-2.5 text-center">{prod.batchDate}</td>
-                        <td className="p-2.5 text-center">{prod.expirationDate}</td>
-                        <td className="p-2.5 text-right font-bold">{prod.status}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="p-4 text-center text-gray-500 font-semibold">
-                        No products found matching filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <form onSubmit={handleAddProduct} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 text-left">
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Product Name</label>
+                <input 
+                  type="text"
+                  name="productName"
+                  value={formData.productName}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
 
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Batch No.</label>
+                <input 
+                  type="text"
+                  name="batchNo"
+                  value={formData.batchNo}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Quantity</label>
+                <input 
+                  type="number"
+                  name="quantity"
+                  value={formData.quantity}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Arrival Date</label>
+                <div className="relative flex items-center">
+                  <input 
+                    type="date"
+                    name="arrivalDate"
+                    value={formData.arrivalDate}
+                    onChange={handleInputChange}
+                    className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 appearance-none backdrop-blur-sm"
+                  />
+                  <Calendar className="w-3.5 h-3.5 text-blue-300 absolute right-3 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Expiration Date</label>
+                <div className="relative flex items-center">
+                  <input 
+                    type="date"
+                    name="expirationDate"
+                    value={formData.expirationDate}
+                    onChange={handleInputChange}
+                    className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 appearance-none backdrop-blur-sm"
+                  />
+                  <Calendar className="w-3.5 h-3.5 text-blue-300 absolute right-3 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Category</label>
+                <div className="relative flex items-center">
+                  <select 
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50 appearance-none backdrop-blur-sm"
+                  >
+                    <option value="" className="bg-slate-900 text-white">Select Category</option>
+                    <option value="Category 1" className="bg-slate-900 text-white">Category 1</option>
+                    <option value="Category 2" className="bg-slate-900 text-white">Category 2</option>
+                    <option value="Category 3" className="bg-slate-900 text-white">Category 3</option>
+                    <option value="Category 4" className="bg-slate-900 text-white">Category 4</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-blue-300 absolute right-3 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Unit Cost</label>
+                <input 
+                  type="text"
+                  name="unitCost"
+                  value={formData.unitCost}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Selling Price</label>
+                <input 
+                  type="text"
+                  name="sellingPrice"
+                  value={formData.sellingPrice}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-blue-200 mb-1">Reorder Level</label>
+                <input 
+                  type="number"
+                  name="reorderLevel"
+                  value={formData.reorderLevel}
+                  onChange={handleInputChange}
+                  className="w-full bg-blue-900/40 border border-blue-700/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/50 backdrop-blur-sm"
+                />
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* SECTION 2: PRODUCT LIST & SEARCH */}
+        <div className="bg-white/40 bg-gradient-to-t from-white backdrop-blur-md rounded-3xl p-5 shadow-lg shadow-blue-500/5 border border-white/60 flex-1 flex flex-col min-h-[250px]">
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
+              PRODUCT LIST
+            </h3>
+
+            <div className="relative flex items-center w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search"
+                className="w-full bg-white/60 border border-white/80 rounded-full pl-9 pr-4 py-1.5 text-xs text-slate-800 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 backdrop-blur-sm"
+              />
+            </div>
           </div>
 
+          {/* Filters Row */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-700 mb-1">Category</label>
+              <div className="relative flex items-center">
+                <select 
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="w-full bg-white/70 border border-white/80 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none appearance-none backdrop-blur-sm"
+                >
+                  <option value="">All Categories</option>
+                  <option value="Category 1">Category 1</option>
+                  <option value="Category 3">Category 3</option>
+                  <option value="Category 4">Category 4</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 pointer-events-none" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-700 mb-1">Stock</label>
+              <div className="relative flex items-center">
+                <select 
+                  value={filterStock}
+                  onChange={(e) => setFilterStock(e.target.value)}
+                  className="w-full bg-white/70 border border-white/80 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none appearance-none backdrop-blur-sm"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="In Stock">In Stock</option>
+                  <option value="Low Stock">Low Stock</option>
+                  <option value="Expired">Expired</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 pointer-events-none" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-700 mb-1">Batch Date</label>
+              <input 
+                type="text"
+                placeholder="e.g. 2026"
+                value={filterBatchDate}
+                onChange={(e) => setFilterBatchDate(e.target.value)}
+                className="w-full bg-white/70 border border-white/80 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none backdrop-blur-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-700 mb-1">Expiration Date</label>
+              <input 
+                type="text"
+                placeholder="e.g. 2028"
+                value={filterExpDate}
+                onChange={(e) => setFilterExpDate(e.target.value)}
+                className="w-full bg-white/70 border border-white/80 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none backdrop-blur-sm"
+              />
+            </div>
+
+            <div className="col-span-2 lg:col-span-1 flex items-end">
+              <button 
+                type="button"
+                onClick={handleClearFilters}
+                className="w-full py-1.5 bg-white/60 hover:bg-white text-slate-700 border border-white/80 font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {/* PRODUCT DATA TABLE */}
+          <div className="flex-1 overflow-x-auto rounded-2xl border border-white/60 bg-white/20 backdrop-blur-sm shadow-sm">
+            <table className="w-full text-left text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-white/40 text-slate-800 font-bold border-b border-white/60">
+                  <th className="p-3">Product Name</th>
+                  <th className="p-3">Category</th>
+                  <th className="p-3 text-center">Current Stock</th>
+                  <th className="p-3 text-center">Unit Cost</th>
+                  <th className="p-3 text-center">Selling Price</th>
+                  <th className="p-3 text-center">Batch Date</th>
+                  <th className="p-3 text-center">Expiration Date</th>
+                  <th className="p-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/40 font-medium text-slate-700">
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((prod) => (
+                    <tr key={prod.id} className="hover:bg-white/30 transition-colors">
+                      <td className="p-3 font-semibold text-slate-900">{prod.name}</td>
+                      <td className="p-3">{prod.category}</td>
+                      <td className="p-3 text-center font-bold text-slate-900">{prod.currentStock}</td>
+                      <td className="p-3 text-center">{prod.unitCost}</td>
+                      <td className="p-3 text-center">{prod.sellingPrice}</td>
+                      <td className="p-3 text-center">{prod.batchDate}</td>
+                      <td className="p-3 text-center">{prod.expirationDate}</td>
+                      <td className="p-3 text-right font-bold text-blue-600">{prod.status}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="p-4 text-center text-slate-500 font-semibold">
+                      No products found matching filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-      </div>
-    </div>
+      </>
   );
 }
