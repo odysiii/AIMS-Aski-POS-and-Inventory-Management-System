@@ -1,25 +1,26 @@
 import React, { useState } from 'react';
 import { 
   Home, 
-  Package, 
-  BarChart2, 
-  Menu, 
-  Settings, 
-  LogOut, 
+  Package,  
   Bell, 
-  Image as ImageIcon 
+  TrendingUp, 
+  Zap,
+  BrainCircuit,
+  BarChart3
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import NotificationPanel from './NotificationPanel';
 
 // --- DATA DEFINITIONS ---
 
@@ -68,7 +69,7 @@ const currentData = {
   ]
 };
 
-// 2. Future Tab Data (Forecasted projections)
+// 2. Future Tab Data
 const futureData = {
   transactionHours: [
     { hour: '8', dark: 15, light: 8 },
@@ -113,211 +114,189 @@ const futureData = {
   ]
 };
 
-export default function DemandForecast() {
-  const [activeTab, setActiveTab] = useState('Future'); // 'Current' or 'Future'
+export default function Demand() {
+  const [demandMode, setDemandMode] = useState('current'); // 'current' | 'future'
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  // Pick dataset based on active tab
-  const activeData = activeTab === 'Current' ? currentData : futureData;
+  // Dynamic Dataset Selection
+  const activeDataSet = demandMode === 'future' ? futureData : currentData;
+
+  const VIBRANT_COLORS = [
+    '#2DD4BF', // Bright Teal
+    '#2563EB', // Royal Blue
+    '#0F172A', // Deep Midnight
+    '#38BDF8', // Soft Sky Blue
+    '#6366F1', // Indigo
+    '#06B6D4', // Cyan
+    '#4F46E5', // Dark Indigo
+    '#0EA5E9', // Ocean Blue
+  ];
 
   return (
-    <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none p-2 sm:p-4">
-      
-      {/* Main App Box */}
-      <div className="relative flex-1 rounded-2xl overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0">
-        
-        {/* SIDEBAR NAVIGATION */}
-        <div className="bg-[#EDEDED] rounded-2xl flex md:flex-col justify-between p-2 md:py-6 md:px-3 shrink-0 border border-white/60 shadow-xs md:w-16 items-center">
-          <div className="flex md:flex-col items-center gap-4 w-full">
-            <button className="p-2 text-gray-600 hover:bg-gray-200 rounded-xl transition-all">
-              <Menu className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Home className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Package className="w-5 h-5" />
-            </button>
-            {/* Active Demand Analytics Tab */}
-            <button className="p-2 bg-[#C0C0C0] text-gray-800 rounded-xl shadow-xs">
-              <BarChart2 className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Menu className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex md:flex-col items-center gap-3 w-full">
-            <button className="p-2 text-gray-500 hover:bg-gray-200 rounded-xl transition-all">
-              <Settings className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all">
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* MAIN PANEL */}
-        <div className="flex-1 bg-[#EDEDED] rounded-2xl p-3 sm:p-5 flex flex-col gap-3 overflow-y-auto border border-white/60 shadow-xs min-h-0">
-          
-          {/* HEADER BAR */}
-          <div className="flex items-center justify-between shrink-0 mb-1">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-gray-300 flex items-center justify-center border border-gray-400/40">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
-              <h1 className="text-xs sm:text-sm font-black text-black tracking-wide uppercase">
-                INVENTORY MANAGEMENT
-              </h1>
+    <>
+        {/* ===== HEADER ====== */}
+        <header className="relative z-30 flex items-center justify-between bg-gradient-to-r from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+              <BrainCircuit className="w-6 h-6" />
             </div>
-
-            <div className="flex items-center gap-3">
-              <button className="p-1.5 text-gray-700 hover:bg-gray-300/60 rounded-full transition-all">
-                <Bell className="w-4 h-4" />
-              </button>
-              <span className="text-xs font-black text-gray-800 hidden sm:inline">Hi, Admin!</span>
-              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center border border-gray-400/40">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* DEMAND CONTENT CONTAINER */}
-          <div className="bg-[#F5F5F5] rounded-2xl p-4 sm:p-5 border border-gray-200/80 flex-1 flex flex-col min-h-0">
-            
-            {/* DEMAND TITLE & TABS */}
-            <div className="shrink-0 mb-4 border-b border-gray-300/80 pb-1">
-              <h2 className="text-sm sm:text-base font-black text-black tracking-wider uppercase mb-2">
-                DEMAND
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">AMPC</p>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+                DEMAND FORECAST
               </h2>
-
-              <div className="flex justify-center items-center gap-12 sm:gap-20 text-xs sm:text-sm font-bold">
-                {/* Current Tab */}
-                <button
-                  onClick={() => setActiveTab('Current')}
-                  className={`relative pb-2 transition-all cursor-pointer ${
-                    activeTab === 'Current' 
-                      ? 'text-black font-black' 
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  Current
-                  {activeTab === 'Current' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-gray-400 rounded-full" />
-                  )}
-                </button>
-
-                {/* Future Tab */}
-                <button
-                  onClick={() => setActiveTab('Future')}
-                  className={`relative pb-2 transition-all cursor-pointer ${
-                    activeTab === 'Future' 
-                      ? 'text-black font-black' 
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  Future
-                  {activeTab === 'Future' && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-gray-400 rounded-full" />
-                  )}
-                </button>
-              </div>
             </div>
-
-            {/* DASHBOARD GRID CHART CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
-              
-              {/* CARD 1: TRANSACTION HOURS */}
-              <div className="bg-[#E4E4E4] rounded-2xl p-3 border border-gray-300/60 flex flex-col items-center">
-                <div className="bg-[#D8D8D8] text-gray-700 text-[10px] font-bold px-4 py-1 rounded-full border border-gray-400/40 uppercase mb-2">
-                  TRANSACTION HOURS
-                </div>
-                
-                <div className="w-full flex-1 min-h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeData.transactionHours} margin={{ top: 10, right: 10, left: -25, bottom: 15 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" />
-                      <XAxis 
-                        dataKey="hour" 
-                        tick={{ fontSize: 9, fill: '#555' }}
-                        label={{ value: 'HOUR OF DAY (8 AM - 6 PM)', position: 'insideBottom', offset: -10, fontSize: 8, fill: '#444', fontWeight: 'bold' }}
-                      />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#555' }} />
-                      <Tooltip />
-                      <Bar dataKey="dark" fill="#525252" radius={[2, 2, 0, 0]} />
-                      <Bar dataKey="light" fill="#9CA3AF" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* CARD 2: REVENUE TREND */}
-              <div className="bg-[#E4E4E4] rounded-2xl p-3 border border-gray-300/60 flex flex-col items-center">
-                <div className="bg-[#D8D8D8] text-gray-700 text-[10px] font-bold px-4 py-1 rounded-full border border-gray-400/40 uppercase mb-2">
-                  REVENUE TREND
-                </div>
-
-                <div className="w-full flex-1 min-h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activeData.revenueTrend} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
-                      <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#555' }} />
-                      <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#555' }} />
-                      <Tooltip />
-                      <Area type="linear" dataKey="line1" stroke="#374151" fill="#4B5563" fillOpacity={0.3} dot={{ r: 2 }} />
-                      <Area type="linear" dataKey="line2" stroke="#6B7280" fill="#9CA3AF" fillOpacity={0.3} dot={{ r: 2 }} />
-                      <Area type="linear" dataKey="line3" stroke="#9CA3AF" fill="#D1D5DB" fillOpacity={0.2} dot={{ r: 2 }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* CARD 3: CATEGORY SALES */}
-              <div className="bg-[#E4E4E4] rounded-2xl p-3 border border-gray-300/60 flex flex-col items-center">
-                <div className="bg-[#D8D8D8] text-gray-700 text-[10px] font-bold px-4 py-1 rounded-full border border-gray-400/40 uppercase mb-2">
-                  CATEGORY SALES
-                </div>
-
-                <div className="w-full flex-1 min-h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeData.categorySales} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" />
-                      <XAxis dataKey="category" tick={{ fontSize: 9, fill: '#555' }} />
-                      <YAxis domain={[0, 900]} ticks={[0, 150, 300, 450, 600, 750, 900]} tick={{ fontSize: 9, fill: '#555' }} />
-                      <Tooltip />
-                      <Bar dataKey="sales" fill="#6B7280" barSize={35} radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* CARD 4: TOP SPECIFIC ITEMS */}
-              <div className="bg-[#E4E4E4] rounded-2xl p-3 border border-gray-300/60 flex flex-col items-center">
-                <div className="bg-[#D8D8D8] text-gray-700 text-[10px] font-bold px-4 py-1 rounded-full border border-gray-400/40 uppercase mb-2">
-                  TOP SPECIFIC ITEMS
-                </div>
-
-                <div className="w-full flex-1 min-h-[180px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activeData.topSpecificItems} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" />
-                      <XAxis dataKey="category" tick={{ fontSize: 9, fill: '#555' }} />
-                      <YAxis domain={[0, 2000]} ticks={[0, 400, 800, 1200, 1600, 2000]} tick={{ fontSize: 9, fill: '#555' }} />
-                      <Tooltip />
-                      <Bar dataKey="seg3" stackId="a" fill="#2D4A53" barSize={35} />
-                      <Bar dataKey="seg2" stackId="a" fill="#8E9399" />
-                      <Bar dataKey="seg1" stackId="a" fill="#B3B7BC" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-            </div>
-
           </div>
 
+          {/* ===== DEMAND TOGGLE BUTTONS & NOTIFICATIONS ===== */}
+          <div className="flex items-center gap-3">
+            {/* Current vs. Future Demand Toggle */}
+            <div className="flex bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80 backdrop-blur-md">
+              <button
+                onClick={() => setDemandMode('current')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 ${
+                  demandMode === 'current'
+                    ? 'bg-white text-blue-600 shadow-md shadow-blue-500/10'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Current Demand
+              </button>
+
+              <button
+                onClick={() => setDemandMode('future')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 ${
+                  demandMode === 'future'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Future Demand
+              </button>
+            </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            >
+              <Bell className="w-5 h-5 text-slate-700" />
+              <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
+              </button>
+          
+              <NotificationPanel 
+               isOpen={isNotifOpen} 
+              onClose={() => setIsNotifOpen(false)} 
+              />
+          </div>
+          </div>
+       </header>
+    
+
+        {/* ======== 4 GRID CHARTS ============= */}
+
+        <div className="grid grid-cols-2 grid-rows-2 gap-4 w-full h-screen">
+
+          {/* ---------- TRANSACTION HRS ---------------*/}
+          <div className="rounded-3xl bg-gradient-to-br from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex flex-col">
+            <div className="flex items-center justify-center relative z-10 mb-4">
+              <div>
+                <h3 className="text-center text-lg font-bold text-slate-800">Transaction Hours</h3>
+                <p className="text-center text-xs text-slate-500">Hourly activity breakdown</p>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full flex items-center justify-center min-h-0">
+              <ResponsiveContainer width="99%" height="100%">
+                <AreaChart data={activeDataSet.transactionHours} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="hour" stroke="#64748b" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Area type="monotone" dataKey="dark" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="light" stroke="#38BDF8" fill="#38BDF8" fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ---------- REVENUE TREND ----------------- */}
+          <div className="rounded-3xl bg-gradient-to-bl from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex flex-col">
+            <div className="flex items-center justify-center relative z-10 mb-4">
+              <div>
+                <h3 className="text-center text-lg font-bold text-slate-800">Revenue Trend</h3>
+                <p className="text-center text-xs text-slate-500">Period-over-period performance tracking</p>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full flex items-center justify-center min-h-0">
+              <ResponsiveContainer width="99%" height="100%">
+                <AreaChart data={activeDataSet.revenueTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Area type="linear" dataKey="line1" stroke="#0F172A" fill="#0F172A" fillOpacity={0.2} dot={{ r: 3, fill: '#0F172A' }} />
+                  <Area type="linear" dataKey="line2" stroke="#2563EB" fill="#2563EB" fillOpacity={0.15} dot={{ r: 3, fill: '#2563EB' }} />
+                  <Area type="linear" dataKey="line3" stroke="#38BDF8" fill="#38BDF8" fillOpacity={0.1} dot={{ r: 3, fill: '#38BDF8' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ------------ CATEGORY SALES ------------- */}
+          <div className="rounded-3xl bg-gradient-to-tr from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex flex-col">
+            <div className="flex items-center justify-center relative z-10 mb-4">
+              <div>
+                <h3 className="text-center text-lg font-bold text-slate-800">Category Sales</h3>
+                <p className="text-center text-xs text-slate-500">Total revenue generated per category</p>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full flex items-center justify-center min-h-0">
+              <ResponsiveContainer width="99%" height="100%">
+                <BarChart data={activeDataSet.categorySales} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="category" stroke="#64748b" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="sales" radius={[8, 8, 0, 0]}>
+                    {activeDataSet.categorySales.map((entry, index) => (
+                      <Cell key={`bar-cell-${index}`} fill={VIBRANT_COLORS[index % VIBRANT_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ------------- TOP SPECIFIC ITEMS ------------ */}
+          <div className="rounded-3xl bg-gradient-to-tl from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex flex-col">
+            <div className="flex items-center justify-center relative z-10 mb-4">
+              <div>
+                <h3 className="text-center text-lg font-bold text-slate-800">Top Specific Items</h3>
+                <p className="text-center text-xs text-slate-500">Segmented volume metrics by product</p>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full flex items-center justify-center min-h-0">
+              <ResponsiveContainer width="99%" height="100%">
+                <BarChart data={activeDataSet.topSpecificItems} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="category" stroke="#64748b" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="seg1" stackId="a" fill="#2563EB" radius={[0, 0, 4, 4]} />
+                  <Bar dataKey="seg2" stackId="a" fill="#38BDF8" />
+                  <Bar dataKey="seg3" stackId="a" fill="#6366F1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
 
-      </div>
-    </div>
+      </>
   );
 }

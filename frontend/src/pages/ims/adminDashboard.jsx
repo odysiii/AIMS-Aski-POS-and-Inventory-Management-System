@@ -1,26 +1,7 @@
 import React, { useState } from 'react';
-import { 
-  Home, 
-  Package, 
-  TrendingUp, 
-  BarChart2, 
-  Settings, 
-  LogOut, 
-  Bell, 
-  Banknote, 
-  AlertTriangle, 
-  Menu,
-  Image as ImageIcon
-} from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
+import { Home, Bell, Banknote, AlertTriangle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import NotificationPanel from './NotificationPanel';
 
 const dailySalesData = [
   { day: '1', sales: 2400 },
@@ -71,260 +52,197 @@ const expiryWatchlist = [
 ];
 
 export default function Dashboard() {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   return (
-    <div className="relative h-screen w-screen bg-[#EAE8FE] flex flex-col font-sans overflow-hidden select-none">
-      
-      {/* Top Header Breadcrumb */}
-      <div className="pt-2 pl-3 sm:pl-4 text-gray-500 font-semibold text-[10px] sm:text-xs tracking-wider uppercase z-20 shrink-0">
-        AIMS - IM - ADMIN - HOME
-      </div>
-
-      {/* Main Container Wrapper */}
-      <div className="relative flex-1 m-2 sm:m-3 md:m-4 mt-1 rounded-2xl overflow-hidden flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0">
+    <>
+      {/* ===== HEADER ====== */}
+      <header className="relative z-30 flex items-center justify-between bg-gradient-to-r from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+            <Home className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">AMPC</p>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">DASHBOARD</h2>
+          </div>
+        </div>
         
-        {/* COLLAPSIBLE SIDEBAR */}
-        <div 
-          className={`bg-[#EDEDED] rounded-2xl flex md:flex-col justify-between p-2 md:py-4 shrink-0 shadow-sm border border-white/60 transition-all duration-300 ease-in-out ${
-            isExpanded ? 'md:w-48 md:px-3' : 'md:w-16 items-center'
-          }`}
-        >
-          {/* Top Nav Group */}
-          <div className="flex md:flex-col items-center gap-2 md:gap-3 w-full">
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={`p-2 text-gray-600 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-                isExpanded ? 'w-full justify-start gap-3 px-2.5' : 'justify-center'
-              }`}
-            >
-              <Menu className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700">Collapse</span>}
-            </button>
+        <div className="relative">
+          <button 
+            onClick={() => setIsNotifOpen(!isNotifOpen)}
+            className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+          >
+            <Bell className="w-5 h-5 text-slate-700" />
+            <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
+          </button>
 
-            <button className={`p-2 bg-[#C0C0C0] text-gray-800 rounded-xl md:rounded-2xl shadow-sm flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Home className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold whitespace-nowrap">Home</span>}
-            </button>
+          <NotificationPanel 
+            isOpen={isNotifOpen} 
+            onClose={() => setIsNotifOpen(false)} 
+          />
+        </div>
+      </header>
 
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Package className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Inventory</span>}
-            </button>
+      {/* MAIN GRID SECTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+        {/* LEFT COLUMN */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          {/* TOP METRICS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/80 via-blue-100/30 to-indigo-300/40 backdrop-blur-xl border border-white/80 p-5 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="absolute -top-10 -left-10 w-32 h-32 bg-sky-300/40 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Total Revenue Today</span>
+                <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 text-white shadow-md shadow-blue-500/30">
+                  <Banknote className="w-4 h-4" />
+                </div>
+              </div>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight relative z-10">PHP 30,550</h3>
+            </div>
 
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <TrendingUp className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Forecast</span>}
-            </button>
-
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <BarChart2 className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Analytics</span>}
-            </button>
+            <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/80 via-blue-100/30 to-indigo-300/40 backdrop-blur-xl border border-white/80 p-5 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
+              <div className="absolute -top-10 -left-10 w-32 h-32 bg-rose-300/30 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Low Stocks Alert</span>
+                <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-rose-600 text-white shadow-md shadow-rose-500/30">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+              </div>
+              <h3 className="text-2xl font-black text-rose-700 tracking-tight relative z-10">5 Items</h3>
+            </div>
           </div>
 
-          {/* Bottom Nav Group */}
-          <div className="flex md:flex-col items-center gap-2 w-full justify-end">
-            <button className={`p-2 text-gray-500 hover:text-black hover:bg-gray-200 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <Settings className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-gray-700 whitespace-nowrap">Settings</span>}
-            </button>
+          {/* DAILY SALES TREND CHART */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-tr from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex-1 flex flex-col justify-between min-h-[220px]">
+            <div className="absolute top-0 left-0 w-64 h-64 bg-sky-300/40 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Daily Sales Trend</h3>
+                <p className="text-xs text-slate-500">Day-by-day overall revenue performance</p>
+              </div>
+            </div>
 
-            <button className={`p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center ${
-              isExpanded ? 'w-full justify-start gap-3 px-3' : 'justify-center'
-            }`}>
-              <LogOut className="w-5 h-5 shrink-0" />
-              {isExpanded && <span className="hidden md:inline text-xs font-bold text-red-600 whitespace-nowrap">Logout</span>}
-            </button>
+            <div className="h-56 w-full relative z-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailySalesData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff80" vertical={false} />
+                  <XAxis dataKey="day" stroke="#475569" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#475569" fontSize={11} tickLine={false} domain={[0, 10000]} ticks={[0, 2000, 4000, 6000, 8000, 10000]} tickFormatter={(val) => `₱${val}`} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(12px)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }} />
+                  <Area type="monotone" dataKey="sales" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#salesGrad)" dot={{ r: 4, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* RECENT TRANSACTIONS TABLE */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl transition-all duration-300 flex flex-col">
+            <div className="mb-3 relative z-10">
+              <h3 className="text-lg font-bold text-slate-800">Recent Transactions</h3>
+              <p className="text-xs text-slate-500">Latest completed and voided point-of-sale entries</p>
+            </div>
+
+            <div className="overflow-x-auto relative z-10">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-slate-500 border-b border-slate-200/60 uppercase text-[10px] tracking-wider font-bold">
+                    <th className="pb-2">Date</th>
+                    <th className="pb-2">Transaction ID</th>
+                    <th className="pb-2 text-center">Amount</th>
+                    <th className="pb-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/40 font-medium text-slate-700">
+                  {recentTransactions.map((tx, idx) => (
+                    <tr key={idx} className="hover:bg-white/50 transition-colors">
+                      <td className="py-2.5 whitespace-nowrap">{tx.date}</td>
+                      <td className="py-2.5 font-mono text-slate-600 whitespace-nowrap">{tx.id}</td>
+                      <td className="py-2.5 text-center font-bold text-slate-800 whitespace-nowrap">{tx.amount}</td>
+                      <td className="py-2.5 text-right whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold ${tx.status === 'Complete' ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-300/50' : 'bg-rose-500/15 text-rose-700 border border-rose-300/50'}`}>
+                          {tx.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        {/* MAIN DASHBOARD CONTENT AREA */}
-        <div className="flex-1 bg-[#EDEDED] rounded-2xl p-3 sm:p-4 flex flex-col gap-3 overflow-y-auto border border-white/60 shadow-sm min-h-0">
-          
-          {/* TOP BAR */}
-          <div className="flex items-center justify-between shrink-0 mb-1 gap-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gray-300 flex items-center justify-center border border-gray-400/40 shrink-0">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
-              <h1 className="text-xs sm:text-sm md:text-base font-black text-black tracking-wide uppercase truncate">
-                INVENTORY MANAGEMENT
-              </h1>
+        {/* RIGHT COLUMN */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          {/* AI DEMAND FORECAST CHART */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 backdrop-blur-xl border border-slate-700/60 p-6 shadow-2xl shadow-slate-900/40 transition-all duration-300 flex-1 flex flex-col justify-between min-h-[220px]">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-blue-600/15 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="mb-3 relative z-10">
+              <h3 className="text-lg font-bold text-white tracking-wide">AI Demand Forecast</h3>
+              <p className="text-xs text-slate-400">Predicted monthly unit requirements</p>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <button className="p-1.5 sm:p-2 text-gray-700 hover:bg-gray-300/60 rounded-full transition-all cursor-pointer">
-                <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-              <span className="text-[11px] sm:text-xs font-black text-gray-800 hidden sm:inline">Hi, Admin!</span>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gray-300 flex items-center justify-center border border-gray-400/40 shrink-0">
-                <ImageIcon className="w-4 h-4 text-gray-600" />
-              </div>
+            <div className="h-52 w-full relative z-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={demandForecastData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="navyDemandGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(12px)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc' }} />
+                  <Area type="monotone" dataKey="demand" stroke="#38bdf8" strokeWidth={2.5} fillOpacity={1} fill="url(#navyDemandGrad)" dot={{ r: 3.5, fill: '#38bdf8', stroke: '#0f172a', strokeWidth: 1.5 }} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* MAIN GRID SECTION */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0">
-            
-            {/* LEFT COLUMN */}
-            <div className="lg:col-span-8 flex flex-col gap-3">
-              
-              {/* TOP METRICS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-[#D9D9D9] p-3 sm:p-4 rounded-xl flex items-start justify-between shadow-xs">
-                  <div>
-                    <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-1 sm:mb-2">
-                      TOTAL REVENUE TODAY
-                    </h3>
-                    <p className="text-xl sm:text-2xl md:text-3xl font-black text-black tracking-tight">
-                      PHP 30,550
-                    </p>
-                  </div>
-                  <div className="p-2 bg-gray-400/30 rounded-lg shrink-0">
-                    <Banknote className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
-                  </div>
-                </div>
+          {/* EXPIRY WATCHLIST */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 backdrop-blur-xl border border-slate-700/60 p-6 shadow-2xl shadow-slate-900/40 transition-all duration-300 flex flex-col flex-1 min-h-[220px]">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                <div className="bg-[#D9D9D9] p-3 sm:p-4 rounded-xl flex items-start justify-between shadow-xs">
-                  <div>
-                    <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-1 sm:mb-2">
-                      LOW STOCKS ALERT
-                    </h3>
-                    <p className="text-xl sm:text-2xl md:text-3xl font-black text-black tracking-tight">
-                      5 ITEMS
-                    </p>
-                  </div>
-                  <div className="p-2 bg-gray-400/30 rounded-lg shrink-0">
-                    <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
-                  </div>
-                </div>
-              </div>
-
-              {/* DAILY SALES TREND CHART */}
-              <div className="bg-[#D9D9D9] p-3 rounded-xl flex-1 flex flex-col min-h-[200px] sm:min-h-[220px]">
-                <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-                  DAILY SALES TREND
-                </h3>
-                <div className="flex-1 w-full min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailySalesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#4B5563" stopOpacity={0.6}/>
-                          <stop offset="95%" stopColor="#4B5563" stopOpacity={0.0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#C2C2C2" vertical={false} />
-                      <XAxis dataKey="day" tick={{ fontSize: 9, fill: '#4B5563' }} />
-                      <YAxis tick={{ fontSize: 9, fill: '#4B5563' }} domain={[0, 10000]} ticks={[0, 2000, 4000, 6000, 8000, 10000]} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="sales" stroke="#374151" strokeWidth={2} fillOpacity={1} fill="url(#salesGrad)" dot={{ r: 3, fill: '#374151' }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* RECENT TRANSACTIONS TABLE */}
-              <div className="bg-[#D9D9D9] p-3 rounded-xl flex flex-col">
-                <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-                  RECENT TRANSACTIONS
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[10px] sm:text-[11px]">
-                    <thead>
-                      <tr className="text-gray-600 border-b border-gray-400/40">
-                        <th className="pb-1.5 font-bold">Date</th>
-                        <th className="pb-1.5 font-bold">Transaction ID</th>
-                        <th className="pb-1.5 font-bold text-center">Amount</th>
-                        <th className="pb-1.5 font-bold text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-400/20 font-medium text-gray-800">
-                      {recentTransactions.map((tx, idx) => (
-                        <tr key={idx} className="hover:bg-gray-400/10 transition-colors">
-                          <td className="py-1.5 whitespace-nowrap">{tx.date}</td>
-                          <td className="py-1.5 font-mono whitespace-nowrap">{tx.id}</td>
-                          <td className="py-1.5 text-center font-bold whitespace-nowrap">{tx.amount}</td>
-                          <td className="py-1.5 text-right font-bold whitespace-nowrap">{tx.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
+            <div className="mb-3 relative z-10">
+              <h3 className="text-lg font-bold text-white tracking-wide">Expiry Watchlist</h3>
+              <p className="text-xs text-slate-400">Stock reaching shelf-life threshold soon</p>
             </div>
 
-            {/* RIGHT COLUMN */}
-            <div className="lg:col-span-4 flex flex-col gap-3">
-              
-              {/* AI DEMAND FORECAST CHART */}
-              <div className="bg-[#D9D9D9] p-3 rounded-xl flex-1 flex flex-col min-h-[200px] sm:min-h-[220px]">
-                <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-                  AI DEMAND FORECAST
-                </h3>
-                <div className="flex-1 w-full min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={demandForecastData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="demandGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6B7280" stopOpacity={0.6}/>
-                          <stop offset="95%" stopColor="#6B7280" stopOpacity={0.0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#C2C2C2" />
-                      <XAxis dataKey="month" tick={{ fontSize: 8, fill: '#4B5563' }} />
-                      <YAxis tick={{ fontSize: 8, fill: '#4B5563' }} domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="demand" stroke="#4B5563" strokeWidth={2} fillOpacity={1} fill="url(#demandGrad)" dot={{ r: 3, fill: '#4B5563' }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* EXPIRY WATCHLIST */}
-              <div className="bg-[#D9D9D9] p-3 rounded-xl flex flex-col flex-1 min-h-[180px] sm:min-h-[220px]">
-                <h3 className="text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-                  EXPIRY WATCHLIST
-                </h3>
-                <div className="overflow-y-auto flex-1 pr-1 max-h-[180px] sm:max-h-[220px]">
-                  <table className="w-full text-left text-[10px] sm:text-[11px]">
-                    <thead>
-                      <tr className="text-gray-600 border-b border-gray-400/40 sticky top-0 bg-[#D9D9D9]">
-                        <th className="pb-1 font-bold">Product</th>
-                        <th className="pb-1 font-bold text-right">Days until Expiry</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-400/20 font-medium text-gray-800">
-                      {expiryWatchlist.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-gray-400/10 transition-colors">
-                          <td className="py-1 truncate max-w-[120px] sm:max-w-none">{item.product}</td>
-                          <td className="py-1 text-right font-bold">{item.days}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
+            <div className="overflow-y-auto flex-1 pr-1 max-h-[200px] relative z-10 navy-scrollbar">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-700/60 uppercase text-[10px] tracking-wider font-bold sticky top-0 backdrop-blur-md">
+                    <th className="pb-2">Product</th>
+                    <th className="pb-2 text-right">Days left</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 font-medium text-slate-200">
+                  {expiryWatchlist.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
+                      <td className="py-2.5 truncate max-w-[140px] sm:max-w-none text-slate-300">{item.product}</td>
+                      <td className="py-2.5 text-right">
+                        <span className={`inline-flex items-center justify-center font-bold px-2 py-0.5 rounded-lg text-xs ${item.days <= 14 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
+                          {item.days} days
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
           </div>
-
         </div>
-
       </div>
-    </div>
+    </>
   );
 }
