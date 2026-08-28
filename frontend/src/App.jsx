@@ -7,6 +7,7 @@ import InventoryList  from './pages/ims/inventoryList'
 import Demand  from './pages/ims/demand'
 import Finance  from './pages/ims/finance'
 import Sidebar from './pages/ims/sidebar'
+import NewPos from './pages/pos'
 
 
 function AppLayout (){
@@ -63,7 +64,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/pos" element={<CashierPOS />} />
-      <Route path="/pages/ims/login" element={<Login />} />
+      <Route path="/" element={<Login />} />
+      <Route path="/newPos" element={<NewPos />} />
 
       <Route element={<AppLayout />}>
         <Route path="/adminDashboard" element={<AdminDashboard />} />
