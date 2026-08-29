@@ -1,22 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, Bell, Banknote, AlertTriangle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { io } from 'socket.io-client';
 import NotificationPanel from './NotificationPanel';
 
-const dailySalesData = [
-  { day: '1', sales: 2400 },
-  { day: '2', sales: 800 },
-  { day: '3', sales: 4200 },
-  { day: '4', sales: 5600 },
-  { day: '5', sales: 5200 },
-  { day: '6', sales: 1800 },
-  { day: '7', sales: 6400 },
-  { day: '8', sales: 4600 },
-  { day: '9', sales: 9600 },
-  { day: '10', sales: 9100 },
-  { day: '20', sales: 8700 },
-  { day: '30', sales: 500 },
-];
+const SOCKET_SERVER_URL = 'http://localhost:5000'; // Match your Node.js backend port
 
 const demandForecastData = [
   { month: 'Jan', demand: 22 },
@@ -31,28 +19,64 @@ const demandForecastData = [
   { month: 'Oct', demand: 51 },
 ];
 
-const recentTransactions = [
-  { date: '02/12/2026', id: '200870027', amount: 'PHP 4,005.00', status: 'Complete' },
-  { date: '02/12/2026', id: '200870026', amount: 'PHP 3,909.00', status: 'Complete' },
-  { date: '02/12/2026', id: '200870025', amount: 'PHP 8,334.00', status: 'Complete' },
-  { date: '02/12/2026', id: '200870024', amount: 'PHP 6,567.00', status: 'Complete' },
-  { date: '02/12/2026', id: '200870023', amount: 'PHP 1,665.00', status: 'Void' },
-];
-
-const expiryWatchlist = [
-  { product: 'Category 1 - Product 1', days: 10 },
-  { product: 'Category 1 - Product 2', days: 14 },
-  { product: 'Category 1 - Product 3', days: 20 },
-  { product: 'Category 2 - Product 1', days: 23 },
-  { product: 'Category 4 - Product 1', days: 25 },
-  { product: 'Category 6 - Product 1', days: 27 },
-  { product: 'Category 8 - Product 1', days: 30 },
-  { product: 'Category 1 - Product 5', days: 30 },
-  { product: 'Category 1 - Product 3', days: 30 },
-];
 
 export default function Dashboard() {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  //dashboard data
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [isLoadingTxns, setIsLoadingTxns] = useState(true);
+
+  const [todayRevenue, setTodayRevenue] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
+
+  const [dailySalesData, setDailySalesData] = useState([]);
+
+  const [expiryWatchList, setExpiryWatchList] = useState([])
+
+  useEffect(() => {
+    // Initial REST fetch for dashboard data
+    const fetchDashboardData = async () => {
+      try {
+        const [txRes, summaryRes] = await Promise.all([
+          fetch(`${SOCKET_SERVER_URL}/api/transactions`),
+          fetch(`${SOCKET_SERVER_URL}/api/dashboard/summary`)
+        ])
+        const txData = await txRes.json();
+        const summaryData = await summaryRes.json();
+
+        setRecentTransactions(txData.slice(0, 5));
+        setTodayRevenue(Number(summaryData.todayRevenue));
+        setLowStockCount(Number(summaryData.lowStockCount));
+        setDailySalesData(summaryData.dailySalesTrend);
+        setExpiryWatchList(summaryData.expiryWatchList);
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoadingTxns(false);
+      }
+    };
+
+    fetchDashboardData();
+
+    //Connect to Socket.io server
+    const socket = io(SOCKET_SERVER_URL);
+
+    socket.on('transaction_created', (newTx) => {
+      setRecentTransactions((prev) => [newTx, ...prev.slice(0, 4)]);
+      setTodayRevenue((prev) => prev + Number(newTx.totalAmount));
+
+      fetch(`${SOCKET_SERVER_URL}/api/dashboard/summary`)
+        .then((res) => res.json())
+        .then((data) => setLowStockCount(data.lowStockCount))
+        .catch(console.error);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   return (
     <>
@@ -67,9 +91,9 @@ export default function Dashboard() {
             <h2 className="text-2xl font-black text-slate-800 tracking-tight">DASHBOARD</h2>
           </div>
         </div>
-        
+
         <div className="relative">
-          <button 
+          <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
             className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
           >
@@ -77,15 +101,15 @@ export default function Dashboard() {
             <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
           </button>
 
-          <NotificationPanel 
-            isOpen={isNotifOpen} 
-            onClose={() => setIsNotifOpen(false)} 
+          <NotificationPanel
+            isOpen={isNotifOpen}
+            onClose={() => setIsNotifOpen(false)}
           />
         </div>
       </header>
 
       {/* MAIN GRID SECTION */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 mt-6">
         {/* LEFT COLUMN */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           {/* TOP METRICS */}
@@ -98,7 +122,9 @@ export default function Dashboard() {
                   <Banknote className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight relative z-10">PHP 30,550</h3>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tight relative z-10">
+                PHP {todayRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </h3>
             </div>
 
             <div className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/80 via-blue-100/30 to-indigo-300/40 backdrop-blur-xl border border-white/80 p-5 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300">
@@ -109,7 +135,9 @@ export default function Dashboard() {
                   <AlertTriangle className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-2xl font-black text-rose-700 tracking-tight relative z-10">5 Items</h3>
+              <h3 className="text-2xl font-black text-rose-700 tracking-tight relative z-10">
+                {lowStockCount} {lowStockCount === 1 ? 'Item' : 'Items'}
+              </h3>
             </div>
           </div>
 
@@ -123,57 +151,101 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* DAILY SALES TREND CHART BLOCK */}
             <div className="h-56 w-full relative z-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailySalesData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff80" vertical={false} />
-                  <XAxis dataKey="day" stroke="#475569" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#475569" fontSize={11} tickLine={false} domain={[0, 10000]} ticks={[0, 2000, 4000, 6000, 8000, 10000]} tickFormatter={(val) => `₱${val}`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(12px)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }} />
-                  <Area type="monotone" dataKey="sales" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#salesGrad)" dot={{ r: 4, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {!dailySalesData || dailySalesData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  No sales recorded for the last 30 days.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dailySalesData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff80" vertical={false} />
+                    <XAxis dataKey="day" stroke="#475569" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#475569" fontSize={11} tickLine={false} tickFormatter={(val) => `₱${val}`} />
+                    <Tooltip
+                      formatter={(value) => [`₱${Number(value).toLocaleString()}`, 'Sales']}
+                      contentStyle={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                        backdropFilter: 'blur(12px)',
+                        borderRadius: '16px',
+                        border: '1px solid rgba(255,255,255,0.8)',
+                        boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      stroke="#2563eb"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#salesGrad)"
+                      dot={{ r: 4, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 2 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
           {/* RECENT TRANSACTIONS TABLE */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl transition-all duration-300 flex flex-col">
-            <div className="mb-3 relative z-10">
-              <h3 className="text-lg font-bold text-slate-800">Recent Transactions</h3>
-              <p className="text-xs text-slate-500">Latest completed and voided point-of-sale entries</p>
+            <div className="mb-3 flex items-center justify-between relative z-10">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Recent Transactions</h3>
+                <p className="text-xs text-slate-500">Latest completed point-of-sale entries</p>
+              </div>
+              {/* Live WebSocket Indicator */}
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/60 px-3 py-1 rounded-full">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Live Feed</span>
+              </div>
             </div>
 
             <div className="overflow-x-auto relative z-10">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-slate-500 border-b border-slate-200/60 uppercase text-[10px] tracking-wider font-bold">
-                    <th className="pb-2">Date</th>
-                    <th className="pb-2">Transaction ID</th>
-                    <th className="pb-2 text-center">Amount</th>
-                    <th className="pb-2 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200/40 font-medium text-slate-700">
-                  {recentTransactions.map((tx, idx) => (
-                    <tr key={idx} className="hover:bg-white/50 transition-colors">
-                      <td className="py-2.5 whitespace-nowrap">{tx.date}</td>
-                      <td className="py-2.5 font-mono text-slate-600 whitespace-nowrap">{tx.id}</td>
-                      <td className="py-2.5 text-center font-bold text-slate-800 whitespace-nowrap">{tx.amount}</td>
-                      <td className="py-2.5 text-right whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold ${tx.status === 'Complete' ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-300/50' : 'bg-rose-500/15 text-rose-700 border border-rose-300/50'}`}>
-                          {tx.status}
-                        </span>
-                      </td>
+              {isLoadingTxns ? (
+                <p className="py-4 text-xs text-slate-400 font-medium text-center">Loading transactions...</p>
+              ) : recentTransactions.length === 0 ? (
+                <p className="py-4 text-xs text-slate-400 font-medium text-center">No transactions recorded yet.</p>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-200/60 uppercase text-[10px] tracking-wider font-bold">
+                      <th className="pb-2">Date / Time</th>
+                      <th className="pb-2">Transaction No</th>
+                      <th className="pb-2 text-center">Amount</th>
+                      <th className="pb-2 text-right">Payment</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/40 font-medium text-slate-700">
+                    {recentTransactions.map((tx) => (
+                      <tr key={tx.id || tx.transactionNo} className="hover:bg-white/50 transition-colors">
+                        <td className="py-2.5 whitespace-nowrap">
+                          {new Date(tx.createdAt).toLocaleDateString('en-GB')} {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="py-2.5 font-mono text-slate-600 whitespace-nowrap">{tx.transactionNo}</td>
+                        <td className="py-2.5 text-center font-bold text-slate-800 whitespace-nowrap">
+                          PHP {Number(tx.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-2.5 text-right whitespace-nowrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-500/15 text-blue-700 border border-blue-300/50">
+                            {tx.paymentMethod}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -195,8 +267,8 @@ export default function Dashboard() {
                 <AreaChart data={demandForecastData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="navyDemandGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6}/>
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0}/>
+                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6} />
+                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
@@ -219,26 +291,46 @@ export default function Dashboard() {
             </div>
 
             <div className="overflow-y-auto flex-1 pr-1 max-h-[200px] relative z-10 navy-scrollbar">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-700/60 uppercase text-[10px] tracking-wider font-bold sticky top-0 backdrop-blur-md">
-                    <th className="pb-2">Product</th>
-                    <th className="pb-2 text-right">Days left</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/80 font-medium text-slate-200">
-                  {expiryWatchlist.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="py-2.5 truncate max-w-[140px] sm:max-w-none text-slate-300">{item.product}</td>
-                      <td className="py-2.5 text-right">
-                        <span className={`inline-flex items-center justify-center font-bold px-2 py-0.5 rounded-lg text-xs ${item.days <= 14 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`}>
-                          {item.days} days
-                        </span>
-                      </td>
+              {!expiryWatchList || expiryWatchList.length === 0 ? (
+                <div className="h-full flex items-center justify-center py-8 text-xs text-slate-500">
+                  No items expiring within threshold.
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-700/60 uppercase text-[10px] tracking-wider font-bold sticky top-0 bg-slate-900/90 backdrop-blur-md">
+                      <th className="pb-2">Product</th>
+                      <th className="pb-2 text-right">Status / Days</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80 font-medium text-slate-200">
+                    {expiryWatchList.map((item, idx) => {
+                      const isExpired = item.days <= 0 || item.status === 'Expired';
+                      const isCritical = item.days <= 14 && !isExpired;
+
+                      return (
+                        <tr key={item.id || idx} className="hover:bg-slate-800/50 transition-colors">
+                          <td className="py-2.5 truncate max-w-[140px] sm:max-w-none text-slate-300">
+                            {item.product}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <span
+                              className={`inline-flex items-center justify-center font-bold px-2 py-0.5 rounded-lg text-xs ${isExpired
+                                  ? 'bg-red-500/30 text-red-400 border border-red-500/60 animate-pulse'
+                                  : isCritical
+                                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                }`}
+                            >
+                              {isExpired ? `Expired` : `${item.days} days`}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

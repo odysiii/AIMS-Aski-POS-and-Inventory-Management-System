@@ -2,21 +2,24 @@
 const { ProductModel, prisma } = require('./Product');
 
 const TransactionModel = {
-  // Fetch all transactions with items
+  // Fetch all transactions with items and cashier details
   findAll: async () => {
     return await prisma.transaction.findMany({
-      include: { items: true },
+      include: {
+        items: true,
+        cashier: { select: { username: true } }
+      },
       orderBy: { createdAt: 'desc' },
     });
   },
 
-  // Process checkout transaction & update stock inside a Prisma $transaction
-  createCheckout: async (payload) => {
+  // Process checkout, update stock, and emit real-time socket event
+  createCheckout: async (payload, io) => {
     const { items, subtotal, discountPercent, discountAmount, totalAmount, paymentMethod, cashierId } = payload;
 
-    return await prisma.$transaction(async (tx) => {
+    const transaction = await prisma.$transaction(async (tx) => {
       // 1. Create Transaction and line items
-      const transaction = await tx.transaction.create({
+      const newTx = await tx.transaction.create({
         data: {
           transactionNo: `TXN-${Date.now()}`,
           subtotal,
@@ -24,7 +27,7 @@ const TransactionModel = {
           discountAmount: discountAmount || 0,
           totalAmount,
           paymentMethod,
-          cashierId: cashierId || 'CASHIER-1',
+          cashierId: Number(cashierId) || 1, // Ensured Int type matching schema
           items: {
             create: items.map((item) => ({
               productId: item.productId,
@@ -35,7 +38,10 @@ const TransactionModel = {
             })),
           },
         },
-        include: { items: true },
+        include: {
+          items: true,
+          cashier: { select: { username: true } }
+        },
       });
 
       // 2. Decrement product stock in PostgreSQL
@@ -46,8 +52,14 @@ const TransactionModel = {
         });
       }
 
-      return transaction;
+      return newTx;
     });
+
+    if (io) {
+      io.emit('transaction_created', transaction);
+    }
+
+    return transaction;
   },
 };
 
