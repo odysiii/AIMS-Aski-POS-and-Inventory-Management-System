@@ -1,374 +1,325 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { io } from 'socket.io-client';
 import { 
-  Home, 
-  Package, 
-  BrainCircuit, 
-  BarChart3,
+  BarChart3, 
   Bell, 
-  TrendingUp, 
-  Zap, 
-  ArrowUpRight,
-  ArrowDownRight
+  DollarSign, 
+  Wallet, 
+  Scale, 
+  ArrowUpRight, 
+  ArrowDownRight,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  Wifi
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  ReferenceLine,
+  Legend
 } from 'recharts';
 import NotificationPanel from './NotificationPanel';
 
-// --- DATA DEFINITIONS ---
-
-// 1. Daily Revenue Line Chart Data
-const dailyRevenueData = [
-  { day: '1', line1: 25000, line2: 10000, line3: 3000 },
-  { day: '2', line1: 24000, line2: 12000, line3: 11000 },
-  { day: '3', line1: 47000, line2: 30000, line3: 11000 },
-  { day: '4', line1: 31000, line2: 22500, line3: 5000 },
-  { day: '5', line1: 36000, line2: 30000, line3: 16000 },
-  { day: '6', line1: 28000, line2: 13000, line3: 9000 },
-  { day: '8', line1: 38000, line2: 19000, line3: 4000 },
-];
-
-// 2. Monthly Revenue Line Chart Data
-const monthlyRevenueData = [
-  { month: 'JAN', line1: 530000, line2: 470000 },
-  { month: 'FEB', line1: 630000, line2: 600000 },
-  { month: 'MAR', line1: 390000, line2: 220000 },
-  { month: 'APR', line1: 760000, line2: 580000 },
-  { month: 'MAY', line1: 490000, line2: 300000 },
-  { month: 'JUN', line1: 490000, line2: 380000 },
-  { month: 'JUL', line1: 960000, line2: 760000 },
-  { month: 'AUG', line1: 320000, line2: 120000 },
-  { month: 'SEP', line1: 760000, line2: 730000 },
-  { month: 'OCT', line1: 660000, line2: 630000 },
-  { month: 'NOV', line1: 750000, line2: 660000 },
-  { month: 'DEC', line1: 700000, line2: 630000 },
-];
-
-// 3. Inventory Balance Donut Chart Data
-const inventoryBalanceData = [
-  { name: 'C1', value: 800 },
-  { name: 'C2', value: 600 },
-  { name: 'C3', value: 300 },
-  { name: 'C4', value: 700 },
-  { name: 'C5', value: 450 },
-  { name: 'C6', value: 500 },
-  { name: 'C7', value: 220 },
-  { name: 'C8', value: 650 },
-  { name: 'C9', value: 380 },
-  { name: 'C10', value: 420 },
-  { name: 'C11', value: 300 },
-  { name: 'C12', value: 348 },
-];
+// Socket connection to backend port 5000
+const socket = io('http://localhost:5000', {
+  transports: ['websocket', 'polling']
+});
 
 export default function Finance() {
-  const [activeTab, setActiveTab] = useState('finance');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [activeMonth, setActiveMonth] = useState('JUL');
+  const [revenueComparisonData, setRevenueComparisonData] = useState([]);
+  const [registerVarianceData, setRegisterVarianceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isConnected, setIsConnected] = useState(socket.connected);
 
-  const metrics = [
+  // Helper function to extract array data safely
+  const handleDataResponse = (responseData) => {
+    if (!responseData) return;
+    
+    // Support both direct array payload and nested object payload
+    const revenue = responseData.revenueComparisonData || responseData.revenue || [];
+    const variance = responseData.registerVarianceData || responseData.variance || [];
+    
+    setRevenueComparisonData(revenue);
+    setRegisterVarianceData(variance);
+  };
+
+  // 1. Fetch metrics directly from Port 5000
+  const fetchFinanceData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // FULL URL TO EXPRESS SERVER (Port 5000)
+      const response = await axios.get('http://localhost:5000/api/finance/summary');
+      handleDataResponse(response.data);
+    } catch (err) {
+      console.error('Failed to load financial data:', err);
+      setError('Failed to connect to backend server at http://localhost:5000');
+    } fontFinally: {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFinanceData();
+
+    function onConnect() { setIsConnected(true); }
+    function onDisconnect() { setIsConnected(false); }
+    function onFinanceUpdated(newData) { handleDataResponse(newData); }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('finance_updated', onFinanceUpdated);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('finance_updated', onFinanceUpdated);
+    };
+  }, []);
+
+  // Compute summary metrics dynamically from state arrays
+  const totalGross = revenueComparisonData.reduce((acc, curr) => acc + (Number(curr.gross) || 0), 0);
+  const totalNet = revenueComparisonData.reduce((acc, curr) => acc + (Number(curr.net) || 0), 0);
+  const netRetentionRate = totalGross > 0 ? ((totalNet / totalGross) * 100).toFixed(1) : '0.0';
+  const totalVariance = registerVarianceData.reduce((acc, curr) => acc + (Number(curr.variance) || 0), 0);
+
+  const topMetrics = [
     {
-      title: 'Predicted Demand',
-      value: '24,850 Units',
-      change: '+14.2%',
+      title: 'Gross Revenue',
+      value: `₱${totalGross.toLocaleString()}`,
+      change: '+12.4%',
       isPositive: true,
-      subtext: 'vs. last month',
-      icon: TrendingUp,
+      subtext: 'Before discounts & voids',
+      icon: DollarSign,
+      color: 'from-blue-600 to-indigo-600'
     },
     {
-      title: 'Optimal Inventory',
-      value: '18,200 Units',
-      change: '+5.1%',
+      title: 'Net Revenue',
+      value: `₱${totalNet.toLocaleString()}`,
+      change: `${netRetentionRate}%`,
       isPositive: true,
-      subtext: 'Target balance',
-      icon: Package,
+      subtext: 'Actual retained income',
+      icon: Wallet,
+      color: 'from-emerald-600 to-teal-600'
     },
     {
-      title: 'AI Model Accuracy',
-      value: '96.8%',
-      change: '+2.4%',
-      isPositive: true,
-      subtext: 'High confidence',
-      icon: BrainCircuit,
-    },
-    {
-      title: 'Stockout Risk',
-      value: '2.1%',
-      change: '-1.8%',
-      isPositive: true,
-      subtext: 'Risk level low',
-      icon: Zap,
-    },
+      title: 'Drawer Variance',
+      value: `₱${Math.abs(totalVariance).toLocaleString()} ${totalVariance < 0 ? 'Short' : 'Over'}`,
+      change: totalVariance === 0 ? '0.0%' : `${totalVariance < 0 ? '-' : '+'}${Math.abs(totalVariance)}`,
+      isPositive: totalVariance >= 0,
+      subtext: totalVariance < 0 ? 'Shortage detected across shifts' : 'Drawer balanced/over',
+      icon: Scale,
+      color: totalVariance < 0 ? 'from-rose-600 to-pink-600' : 'from-amber-500 to-orange-600'
+    }
   ];
 
-  const VIBRANT_COLORS = [
-  '#2DD4BF', // Bright Teal
-  '#2563EB', // Royal Blue
-  '#0F172A', // Deep Midnight
-  '#38BDF8', // Soft Sky Blue
-  '#6366F1', // Indigo
-  '#06B6D4', // Cyan
-  '#4F46E5', // Dark Indigo
-  '#0EA5E9', // Ocean Blue
-];
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+        <p className="text-slate-600 font-semibold">Fetching financial metrics...</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-        
-        {/* ===== HEADER ====== */}
-        <header className="relative z-30 flex items-center justify-between bg-gradient-to-r from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30">
-              <BarChart3 className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">AMPC</p>
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                FINANCIAL ANALYTICS
-              </h2>
-            </div>
+    <div className="space-y-6">
+      {/* ===== HEADER ===== */}
+      <header className="relative z-30 flex items-center justify-between bg-gradient-to-r from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+            <BarChart3 className="w-6 h-6" />
           </div>
-
-          <div className="relative">
-          <button 
-            onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
-          >
-            <Bell className="w-5 h-5 text-slate-700" />
-            <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
-          </button>
-
-          <NotificationPanel 
-          isOpen={isNotifOpen}
-          onClose={() => setIsNotifOpen(false)}
-          />
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">AMPC POS</p>
+              <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                isConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+              }`}>
+                <Wifi className="w-3 h-3" />
+                {isConnected ? 'LIVE' : 'OFFLINE'}
+              </span>
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">
+              FINANCE & AUDIT CONTROL
+            </h2>
           </div>
-        </header>
-
-        {/* ===== 4 SMALL BOX ===== */}
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {metrics.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={idx}
-                className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/80 via-blue-100/30 to-indigo-300/40 backdrop-blur-xl border border-white/80 p-5 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300"
-              >
-                <div className="absolute -top-10 -left-10 w-32 h-32 bg-sky-300/40 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
-                <div className="flex items-center justify-between mb-3 relative z-10">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    {item.title}
-                  </span>
-                  <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 text-white shadow-md shadow-blue-500/30">
-                    <Icon className="w-4 h-4" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-1 relative z-10">
-                  {item.value}
-                </h3>
-                <div className="flex items-center gap-1.5 text-xs relative z-10">
-                  <span className={`inline-flex items-center font-bold px-2 py-0.5 rounded-lg bg-white/60 backdrop-blur-md shadow-sm ${item.isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {item.isPositive ? <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />}
-                    {item.change}
-                  </span>
-                  <span className="text-slate-500 font-medium">{item.subtext}</span>
-                </div>
-              </div>
-            );
-          })}
-        </section>
-
-        {/* ======= CHARTS SECTION ========== */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* --------- Daily Revenue Chart -----------*/}
-          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl bg-gradient-to-tr from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:shadow-blue-500/15 transition-all duration-300 flex flex-col justify-between">
-            <div className="absolute top-0 left-0 w-64 h-64 bg-sky-300/40 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">Daily Revenue Trends</h3>
-                <p className="text-xs text-slate-500">Day-by-day revenue line metrics</p>
-              </div>
-            </div>
-            <div className="h-64 w-full relative z-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyRevenueData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff80" />
-                  <XAxis dataKey="day" stroke="#475569" fontSize={12} tickLine={false} />
-                  <YAxis 
-                    stroke="#475569" 
-                    fontSize={12} 
-                    tickLine={false} 
-                    tickFormatter={(value) => `₱${value / 1000}k`} 
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(255, 255, 255, 0.85)', 
-                      backdropFilter: 'blur(12px)',
-                      borderRadius: '16px',
-                      border: '1px solid rgba(255,255,255,0.8)',
-                      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'
-                    }} 
-                  />
-                  <Line type="monotone" dataKey="line1" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="line2" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="line3" stroke="#0ea5e9" strokeWidth={2} strokeDasharray="5 5" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* ------------- Inventory Balance ----------------  */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 rounded-3xl px-8 py-4 shadow-xl shadow-blue-500/10 flex flex-col justify-between">
-            <div className="absolute top-0 left-0 w-64 h-64 bg-sky-300/40 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="relative z-10">
-              <h3 className="text-lg font-bold text-slate-800">Inventory Distribution</h3>
-              <p className="text-xs text-slate-500">Category Balance Proportion</p>
-            </div>
-            
-            <div className="h-64 w-full relative z-10">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={inventoryBalanceData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                   {inventoryBalanceData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={VIBRANT_COLORS[index % VIBRANT_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(255, 255, 255, 0.85)', 
-                      backdropFilter: 'blur(12px)',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255,255,255,0.8)'
-                    }} 
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              
-              {/* Exactly Centered Inner Content */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center text-center pointer-events-none">
-                <span className="text-xl font-black text-slate-800 leading-tight">5.4k</span>
-                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Total Units</span>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/*------------- MONTHLY REVENUE ================= */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 border border-slate-800 p-6 shadow-2xl transition-all duration-300">
-          
-          {/* Subtle Backlight Radial Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex items-center gap-3 relative">
+          <button 
+            onClick={fetchFinanceData} 
+            className="p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            title="Refresh Data"
+          >
+            <RefreshCw className="w-5 h-5 text-slate-700" />
+          </button>
 
-          {/* Header & Legend */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              className="relative p-3 rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            >
+              <Bell className="w-5 h-5 text-slate-700" />
+              <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white animate-pulse" />
+            </button>
+
+            <NotificationPanel 
+              isOpen={isNotifOpen}
+              onClose={() => setIsNotifOpen(false)}
+            />
+          </div>
+        </div>
+      </header>
+
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm font-semibold flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={fetchFinanceData} className="underline">Retry</button>
+        </div>
+      )}
+
+      {/* ===== 3 CORE KPI CARDS ===== */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {topMetrics.map((item, idx) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={idx}
+              className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/80 via-blue-100/30 to-indigo-300/40 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300"
+            >
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  {item.title}
+                </span>
+                <div className={`p-2.5 rounded-2xl bg-gradient-to-tr ${item.color} text-white shadow-md shadow-blue-500/30`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+              </div>
+              <h3 className="text-3xl font-black text-slate-800 tracking-tight mb-2 relative z-10">
+                {item.value}
+              </h3>
+              <div className="flex items-center gap-2 text-xs relative z-10">
+                <span className={`inline-flex items-center font-bold px-2.5 py-1 rounded-xl bg-white/70 backdrop-blur-md shadow-sm ${item.isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {item.isPositive ? <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />}
+                  {item.change}
+                </span>
+                <span className="text-slate-500 font-medium">{item.subtext}</span>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      {/* ======= CHARTS SECTION ========== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* 1 & 2: GROSS vs NET REVENUE COMPARISON */}
+        <div className="lg:col-span-2 relative overflow-hidden rounded-3xl bg-gradient-to-tr from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4 relative z-10">
             <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">Monthly Revenue Projections</h3>
-              <p className="text-xs text-slate-400">12-Month revenue forecasting comparison</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 text-xs font-semibold text-sky-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-sm shadow-sky-400/50" /> Target
-              </span>
-              <span className="inline-flex items-center gap-2 text-xs font-semibold text-blue-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" /> Revenue
-              </span>
+              <h3 className="text-lg font-bold text-slate-800">Gross vs. Net Revenue Breakdown</h3>
+              <p className="text-xs text-slate-500">Comparing top-line totals against net retained revenue after discounts</p>
             </div>
           </div>
 
-          {/* Chart Canvas */}
-          <div className="h-56 w-full relative z-10">
+          <div className="h-72 w-full relative z-10">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyRevenueData} margin={{ top: 15, right: 10, left: -9, bottom: 0 }}>
-                {/* Horizontal Minimal Gridlines */}
-                <CartesianGrid strokeDasharray="0" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="month" hide />
+              <BarChart data={revenueComparisonData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} />
                 <YAxis 
-                  stroke="#475569" 
-                  fontSize={11} 
+                  stroke="#64748b" 
+                  fontSize={12} 
                   tickLine={false} 
-                  axisLine={false} 
-                  tickFormatter={(value) => `₱${value / 1000}k`}
+                  tickFormatter={(val) => `₱${val / 1000}k`} 
                 />
-                
-                {/* Custom Hover Vertical Cursor Line */}
                 <Tooltip 
-                  cursor={{ stroke: '#38bdf8', strokeWidth: 1.5, strokeDasharray: '3 3' }}
+                  formatter={(value) => [`₱${Number(value).toLocaleString()}`, '']}
                   contentStyle={{ 
-                    backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
                     backdropFilter: 'blur(12px)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#fff',
-                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)'
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255,255,255,0.8)',
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'
                   }} 
                 />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                <Bar dataKey="gross" name="Gross Revenue" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="net" name="Net Revenue" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-                {/* Primary Light Sky Smooth Line */}
-                <Line 
-                  type="monotone" 
-                  dataKey="line1" 
-                  stroke="#38bdf8" 
-                  strokeWidth={2.5} 
-                  dot={false}
-                  activeDot={{ r: 6, fill: '#38bdf8', stroke: '#ffffff', strokeWidth: 2 }}
+        {/* 3: CASH DRAWER VARIANCE AUDIT */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-white via-white/90 to-blue-200/60 backdrop-blur-xl border border-white/80 p-6 shadow-xl shadow-blue-500/10 flex flex-col justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Register Variance Audit</h3>
+            <p className="text-xs text-slate-500 mb-4">Shift reconciliation balance check</p>
+          </div>
+
+          <div className="h-48 w-full relative z-10 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={registerVarianceData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                <XAxis type="number" stroke="#64748b" fontSize={11} tickFormatter={(val) => `₱${val}`} />
+                <YAxis dataKey="shift" type="category" stroke="#64748b" fontSize={11} width={80} tickLine={false} />
+                <Tooltip 
+                  formatter={(value) => [`₱${value}`, 'Variance']}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.8)'
+                  }}
                 />
-                
-                {/* Secondary Deep Blue Smooth Line */}
-                <Line 
-                  type="monotone" 
-                  dataKey="line2" 
-                  stroke="#3b82f6" 
-                  strokeWidth={2.5} 
-                  dot={false}
-                  activeDot={{ r: 6, fill: '#3b82f6', stroke: '#ffffff', strokeWidth: 2 }}
+                <ReferenceLine x={0} stroke="#94a3b8" strokeWidth={2} />
+                <Bar 
+                  dataKey="variance" 
+                  fill="#f43f5e"
+                  radius={[4, 4, 4, 4]} 
                 />
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Month Navigation Pill Bar */}
-          <div className="mt-4 grid grid-cols-12 gap-1 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 relative z-10 items-center">
-            {monthlyRevenueData.map((item) => {
-              const isSelected = activeMonth === item.month;
-              return (
-                <button
-                  key={item.month}
-                  onClick={() => setActiveMonth(item.month)}
-                  className={`h-6 flex items-center justify-center rounded-xl text-xs font-bold transition-all text-center ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                  }`}
-                >
-                  {item.month}
-                </button>
-              );
-            })}
+          {/* Mini Shift Audit Log List */}
+          <div className="space-y-2 relative z-10 border-t border-slate-200/60 pt-3 max-h-40 overflow-y-auto">
+            {registerVarianceData.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-2">No shift log data available</p>
+            ) : (
+              registerVarianceData.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+                  <div className="flex items-center gap-1.5">
+                    {item.variance < 0 ? (
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+                    ) : item.variance > 0 ? (
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    )}
+                    <span className="font-bold text-slate-700">{item.cashier || item.shift}</span>
+                  </div>
+                  <span className={`font-black ${item.variance < 0 ? 'text-rose-600' : item.variance > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
+                    {item.variance === 0 ? '₱0 (Balanced)' : `₱${item.variance}`}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
 
         </div>
 
-      </>
+      </div>
+    </div>
   );
 }

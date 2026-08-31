@@ -7,7 +7,7 @@ const TransactionModel = {
     return await prisma.transaction.findMany({
       include: {
         items: true,
-        cashier: { select: { username: true } }
+        cashier: { select: { username: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -15,10 +15,36 @@ const TransactionModel = {
 
   // Process checkout, update stock, and emit real-time socket event
   createCheckout: async (payload, io) => {
-    const { items, subtotal, discountPercent, discountAmount, totalAmount, paymentMethod, cashierId } = payload;
+    const {
+      items,
+      subtotal,
+      discountPercent,
+      discountAmount,
+      totalAmount,
+      paymentMethod,
+      cashierId,
+    } = payload;
 
+    // 1. Resolve a valid cashierId dynamically (defaults to 5)
+    let validCashierId = Number(cashierId) || 5;
+
+    // Check if the target cashier exists in DB to prevent P2003 errors
+    const cashierExists = await prisma.user.findUnique({
+      where: { id: validCashierId },
+    });
+
+    if (!cashierExists) {
+      // Grab the first user in the database as a fallback
+      const fallbackUser = await prisma.user.findFirst();
+      if (!fallbackUser) {
+        throw new Error('No user/cashier found in the database.');
+      }
+      validCashierId = fallbackUser.id;
+    }
+
+    // 2. Execute database transaction
     const transaction = await prisma.$transaction(async (tx) => {
-      // 1. Create Transaction and line items
+      // Create Transaction and line items
       const newTx = await tx.transaction.create({
         data: {
           transactionNo: `TXN-${Date.now()}`,
@@ -27,28 +53,28 @@ const TransactionModel = {
           discountAmount: discountAmount || 0,
           totalAmount,
           paymentMethod,
-          cashierId: Number(cashierId) || 1, // Ensured Int type matching schema
+          cashierId: validCashierId,
           items: {
             create: items.map((item) => ({
-              productId: item.productId,
+              productId: Number(item.productId),
               name: item.name,
-              unitPrice: item.unitPrice,
-              quantity: item.quantity,
-              subtotal: item.unitPrice * item.quantity,
+              unitPrice: Number(item.unitPrice),
+              quantity: Number(item.quantity),
+              subtotal: Number(item.unitPrice) * Number(item.quantity),
             })),
           },
         },
         include: {
           items: true,
-          cashier: { select: { username: true } }
+          cashier: { select: { username: true } },
         },
       });
 
-      // 2. Decrement product stock in PostgreSQL
+      // Decrement product stock in PostgreSQL
       for (const item of items) {
         await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
+          where: { id: Number(item.productId) },
+          data: { stock: { decrement: Number(item.quantity) } },
         });
       }
 
