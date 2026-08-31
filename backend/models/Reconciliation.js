@@ -14,9 +14,7 @@ const ReconciliationModel = {
   },
 
   // 2. Aggregate sales data for X-Reading Report
-  // Named `getExpectedCash` to match your index.js route call
   getExpectedCash: async () => {
-    // Set bounds for today's sales
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -53,7 +51,7 @@ const ReconciliationModel = {
     const grossSalesVal = parseFloat(overallAggregation._sum.totalAmount?.toString() || 0.0);
 
     return {
-      expectedCash: expectedCashVal, // Frontend expects this exact property name
+      expectedCash: expectedCashVal,
       grossSales: grossSalesVal,
       totalDiscount: parseFloat(overallAggregation._sum.discountAmount?.toString() || 0.0),
       netSales: grossSalesVal,
@@ -63,7 +61,7 @@ const ReconciliationModel = {
     };
   },
 
-  // 3. Save reconciliation record to PostgreSQL
+  // 3. Save reconciliation record to PostgreSQL with dynamic FK lookup
   create: async (data) => {
     const {
       reportNo,
@@ -81,13 +79,29 @@ const ReconciliationModel = {
       status,
     } = data;
 
+    // Resolve target cashier ID dynamically (defaults to 5)
+    let validCashierId = parseInt(cashierId, 10) || 5;
+
+    // Verify user exists to prevent P2003 foreign key error
+    const cashierExists = await prisma.user.findUnique({
+      where: { id: validCashierId },
+    });
+
+    if (!cashierExists) {
+      const fallbackUser = await prisma.user.findFirst();
+      if (!fallbackUser) {
+        throw new Error('No valid user/cashier found in database to associate reconciliation.');
+      }
+      validCashierId = fallbackUser.id;
+    }
+
     // Fallback report number generator
     const generatedReportNo = reportNo || `X-${Math.floor(100000 + Math.random() * 900000)}`;
 
     return await prisma.reconciliation.create({
       data: {
         reportNo: generatedReportNo,
-        cashierId: parseInt(cashierId, 10) || 1,
+        cashierId: validCashierId,
 
         // X-Reading Sales Totals
         grossSales: parseFloat(grossSales),
@@ -96,7 +110,7 @@ const ReconciliationModel = {
         netSales: parseFloat(netSales),
         cashDiscount: parseFloat(cashDiscount),
 
-        // Denomination Breakdown (Fixed p0_25 to match Prisma Schema)
+        // Denomination Breakdown
         p1000: parseInt(denominations.p1000, 10) || 0,
         p500: parseInt(denominations.p500, 10) || 0,
         p200: parseInt(denominations.p200, 10) || 0,
@@ -106,7 +120,7 @@ const ReconciliationModel = {
         p10: parseInt(denominations.p10, 10) || 0,
         p5: parseInt(denominations.p5, 10) || 0,
         p1: parseInt(denominations.p1, 10) || 0,
-        p0_25: parseInt(denominations.c25 || denominations.p0_25, 10) || 0, // FIXED HERE
+        p0_25: parseInt(denominations.c25 || denominations.p0_25, 10) || 0,
 
         // Financial Accountability Summary
         posCash: parseFloat(posCash),
@@ -115,6 +129,9 @@ const ReconciliationModel = {
 
         status: status || 'COMPLETED',
         notes: notes || 'End of Shift Audit',
+      },
+      include: {
+        cashier: { select: { username: true } },
       },
     });
   },

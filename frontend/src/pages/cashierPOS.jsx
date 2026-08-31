@@ -186,53 +186,64 @@ export default function CashierPOS() {
   };
 
   // SUBMIT CONFIRMED TRANSACTION TO BACKEND
-  const handleConfirmSale = async () => {
-    if (cart.length === 0) {
-      alert("Cart is empty!");
-      return;
-    }
+  // SUBMIT CONFIRMED TRANSACTION TO BACKEND
+const handleConfirmSale = async () => {
+  if (cart.length === 0) {
+    alert("Cart is empty!");
+    return;
+  }
 
-    // Sanitize Enum value ("E-wallet" -> "E_WALLET")
-    const formattedPaymentMethod = paymentMethod
-      .toUpperCase()
-      .replace('-', '_')
-      .replace(' ', '_');
+  // Calculate reliable values inline to prevent state mismatch
+  const currentSubtotal = cart.reduce(
+    (sum, item) => sum + Number(item.unitPrice) * item.quantity,
+    0
+  );
+  const currentDiscountAmount = (currentSubtotal * discountPercent) / 100;
+  const currentTotalAmount = Math.max(0, currentSubtotal - currentDiscountAmount);
 
-    const payload = {
-      items: cart.map((item) => ({
-        productId: item.id,
-        name: item.name,
-        unitPrice: Number(item.unitPrice),
-        quantity: item.quantity,
-      })),
-      subtotal,
-      discountPercent,
-      discountAmount,
-      totalAmount: cartTotal,
-      paymentMethod: formattedPaymentMethod, // "CASH", "CARD", "E_WALLET"
-      cashierId: 1, // Must be integer for Prisma User relation
-    };
+  // Sanitize Enum value ("E-wallet" -> "E_WALLET")
+  const formattedPaymentMethod = paymentMethod
+    .toUpperCase()
+    .replace('-', '_')
+    .replace(' ', '_');
 
-    try {
-      const response = await fetch('http://localhost:5000/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        alert(`Transaction successful! PHP ${cartTotal.toFixed(2)} recorded.`);
-        handleClearCart();
-        fetchProducts();
-      } else {
-        const errorData = await response.json();
-        alert(`Transaction failed: ${errorData.message || 'Server error'}`);
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      alert("Error connecting to server!");
-    }
+  const payload = {
+    items: cart.map((item) => ({
+      productId: Number(item.id), // Ensure ID is numeric
+      name: item.name,
+      unitPrice: Number(item.unitPrice),
+      quantity: Number(item.quantity),
+    })),
+    subtotal: Number(currentSubtotal.toFixed(2)),
+    discountPercent: Number(discountPercent),
+    discountAmount: Number(currentDiscountAmount.toFixed(2)),
+    totalAmount: Number(currentTotalAmount.toFixed(2)),
+    paymentMethod: formattedPaymentMethod, // "CASH", "CARD", "E_WALLET"
+    cashierId: 5,
   };
+
+  try {
+    const response = await fetch('http://localhost:5000/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const responseData = await response.json();
+
+    if (response.ok) {
+      alert(`Transaction successful! PHP ${currentTotalAmount.toFixed(2)} recorded.`);
+      handleClearCart();
+      fetchProducts(); // Refresh stock counts from server
+    } else {
+      console.error('Server error details:', responseData);
+      alert(`Transaction failed: ${responseData.message || responseData.error || 'Server error'}`);
+    }
+  } catch (err) {
+    console.error('Checkout network error:', err);
+    alert("Error connecting to server! Check backend connection at http://localhost:5000");
+  }
+};
 
   // FEATURE 3: EOD RECONCILIATION API
   const fetchExpectedCash = async () => {
@@ -293,7 +304,7 @@ export default function CashierPOS() {
 
   const handleSubmitReconciliation = async () => {
     const payload = {
-      cashierId: 1,
+      cashierId: 5,
       grossSales: grossSalesTotal || expectedSales,
       pointsAvailed: 0.00,
       totalDiscount: discountAmount || 0,

@@ -1,0 +1,12 @@
+Terminal 1
+cd frontend
+npm run dev
+
+Terminal 2
+cd backend
+npm run dev
+
+Terminal 3
+cd ai-service
+.\venv\Scripts\activate
+uvicorn main:app --reload --port 8000
