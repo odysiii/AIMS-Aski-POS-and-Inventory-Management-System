@@ -2,7 +2,9 @@ const { prisma } = require('./Product');
 const { cleanSupplierName, findSupplierByName } = require('../services/supplierName');
 
 const VAT_RATE = 0.12;
-const TAGGING_OPTIONS = ['Regular', 'Urgent', 'Rush', 'Special Order'];
+// Which store/business unit the order is for. Older orders may still carry the previous
+// priority-style tags (Regular, Urgent, ...); those are kept as-is and only new saves are checked.
+const TAGGING_OPTIONS = ['COOP STORE', 'WATER HOPE', 'COCA COLA', 'JAZZ EAT', 'BIGASAN', 'PRINTING'];
 const MAX_TOTAL_CENTS = 9999999999; // Decimal(10,2) ceiling
 const MAX_LINE_QUANTITY = 1000000;
 
@@ -78,8 +80,10 @@ const normalizeOrderInput = async ({ supplierId, supplierName, items, terms, rem
   if (discountCents > grossCents) throw new PurchasingError(400, 'Discount cannot exceed the order total');
   if (grossCents > MAX_TOTAL_CENTS) throw new PurchasingError(400, 'Order total is too large');
 
-  const taggingValue = tagging === undefined || tagging === null || tagging === '' ? 'Regular' : tagging;
-  if (!TAGGING_OPTIONS.includes(taggingValue)) throw new PurchasingError(400, 'Invalid tagging');
+  const taggingValue = typeof tagging === 'string' ? tagging.trim() : '';
+  if (!TAGGING_OPTIONS.includes(taggingValue)) {
+    throw new PurchasingError(400, `Tagging is required: choose one of ${TAGGING_OPTIONS.join(', ')}`);
+  }
 
   return {
     supplierRef,

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Receipt, Download, Loader2, RefreshCw, Inbox, DollarSign, Wallet, Percent } from 'lucide-react';
+import { Receipt, Download, Loader2, RefreshCw, Inbox, DollarSign, Wallet, Percent, Ban } from 'lucide-react';
 import { apiFetch } from '../../auth/apiFetch';
 import { exportToExcel } from '../../utils/exportExcel';
 
 const API_BASE_URL = 'http://localhost:5000/api';
-const peso = (n) => `₱${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const peso = (n) => {
+  const v = Number(n);
+  return `${v < 0 ? '-' : ''}₱${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 const PAYMENT_LABELS = { CASH: 'Cash', CARD: 'Card', E_wallet: 'E-wallet' };
 
@@ -21,7 +24,7 @@ const monthLabel = (month) => {
 export default function SalesReport() {
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState([]);
-  const [totals, setTotals] = useState({ count: 0, subtotal: 0, discountAmount: 0, totalAmount: 0 });
+  const [totals, setTotals] = useState({ count: 0, subtotal: 0, discountAmount: 0, voidCount: 0, voidAmount: 0, totalAmount: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -51,13 +54,16 @@ export default function SalesReport() {
     try {
       const sheetRows = rows.map((r) => ({
         'Date': new Date(r.createdAt).toLocaleString(),
+        'Type': r.kind === 'VOID' ? 'Void' : 'Sale',
         'Transaction #': r.transactionNo,
+        'Void Of / Voided By': r.kind === 'VOID' ? r.voidOf : r.voidNo || '',
         'Items': r.itemsCount,
-        'Subtotal (₱)': Number(r.subtotal).toFixed(2),
-        'Discount (₱)': Number(r.discountAmount).toFixed(2),
+        'Subtotal (₱)': r.subtotal == null ? '' : Number(r.subtotal).toFixed(2),
+        'Discount (₱)': r.discountAmount == null ? '' : Number(r.discountAmount).toFixed(2),
         'Total (₱)': Number(r.totalAmount).toFixed(2),
         'Payment Method': PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod,
         'Cashier': r.cashier || '',
+        'Void Reason': r.reason || '',
       }));
       await exportToExcel(sheetRows, `Sales_Report_${month}`);
     } finally {
@@ -69,6 +75,7 @@ export default function SalesReport() {
     { title: 'Transactions', value: totals.count.toLocaleString(), icon: Receipt, color: 'from-blue-600 to-indigo-600' },
     { title: 'Gross Sales', value: peso(totals.subtotal), icon: DollarSign, color: 'from-emerald-600 to-teal-600' },
     { title: 'Discounts', value: peso(totals.discountAmount), icon: Percent, color: 'from-amber-500 to-orange-600' },
+    { title: `Voids (${totals.voidCount || 0})`, value: peso(-(totals.voidAmount || 0)), icon: Ban, color: 'from-rose-500 to-red-600' },
     { title: 'Net Sales', value: peso(totals.totalAmount), icon: Wallet, color: 'from-indigo-600 to-purple-600' },
   ];
 
@@ -117,7 +124,7 @@ export default function SalesReport() {
         </div>
       )}
 
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
         {cards.map((item) => {
           const Icon = item.icon;
           return (
@@ -139,7 +146,7 @@ export default function SalesReport() {
 
       <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl shadow-blue-500/5">
         <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800">{monthLabel(month)} — one row per transaction</h3>
+          <h3 className="text-sm font-bold text-slate-800">{monthLabel(month)} — one row per sale, plus one per void (on the day it was voided)</h3>
         </div>
         <div className="overflow-y-auto overflow-x-hidden max-h-[700px]">
           <table className="w-full text-left text-xs">
@@ -166,18 +173,41 @@ export default function SalesReport() {
                   </td>
                 </tr>
               )}
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 font-mono text-slate-700">{r.transactionNo}</td>
-                  <td className="px-4 py-3 text-center font-bold text-slate-900">{r.itemsCount}</td>
-                  <td className="px-4 py-3 text-right text-slate-700">{peso(r.subtotal)}</td>
-                  <td className="px-4 py-3 text-right text-rose-600">{Number(r.discountAmount) > 0 ? `-${peso(r.discountAmount)}` : '—'}</td>
-                  <td className="px-4 py-3 text-right font-bold text-slate-900">{peso(r.totalAmount)}</td>
-                  <td className="px-4 py-3 text-slate-500">{PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod}</td>
-                  <td className="px-4 py-3 text-slate-500">{r.cashier || '—'}</td>
-                </tr>
-              ))}
+              {rows.map((r) =>
+                r.kind === 'VOID' ? (
+                  <tr key={r.id} className="bg-rose-50/50" title={r.reason ? `Reason: ${r.reason}` : undefined}>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-rose-700">{r.transactionNo}</span>
+                      <span className="ml-2 text-[10px] font-bold text-rose-600">VOID of {r.voidOf}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center font-bold text-slate-900">{r.itemsCount}</td>
+                    <td className="px-4 py-3 text-right text-slate-300">—</td>
+                    <td className="px-4 py-3 text-right text-slate-300">—</td>
+                    <td className="px-4 py-3 text-right font-bold text-rose-600">{peso(r.totalAmount)}</td>
+                    <td className="px-4 py-3 text-slate-500">{PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod}</td>
+                    <td className="px-4 py-3 text-slate-500">{r.cashier || '—'}</td>
+                  </tr>
+                ) : (
+                  <tr key={r.id}>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-slate-700">{r.transactionNo}</span>
+                      {r.voidNo && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-bold" title={`Voided by ${r.voidNo}`}>
+                          VOIDED
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center font-bold text-slate-900">{r.itemsCount}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{peso(r.subtotal)}</td>
+                    <td className="px-4 py-3 text-right text-rose-600">{Number(r.discountAmount) > 0 ? `-${peso(r.discountAmount)}` : '—'}</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-900">{peso(r.totalAmount)}</td>
+                    <td className="px-4 py-3 text-slate-500">{PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod}</td>
+                    <td className="px-4 py-3 text-slate-500">{r.cashier || '—'}</td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         </div>

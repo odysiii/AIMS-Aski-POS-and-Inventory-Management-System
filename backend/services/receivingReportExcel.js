@@ -1,6 +1,7 @@
 const ExcelJS = require('exceljs');
 const { VAT_RATE } = require('../models/PurchaseOrder');
 const { COMPANY } = require('./purchaseOrderExcel');
+const { fmtDateTime } = require('./excelDateTime');
 
 const THIN = { style: 'thin' };
 const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
@@ -177,6 +178,12 @@ async function buildReceivingReportWorkbook(rr) {
   sheet.getCell(`A${row}`).font = { bold: true };
   sheet.mergeCells(`B${row}:H${row}`);
   sheet.getCell(`B${row}`).value = rr.remarks || '-';
+  row++;
+  sheet.getCell(`A${row}`).value = 'CREATED AT :';
+  sheet.getCell(`A${row}`).font = { bold: true };
+  sheet.mergeCells(`B${row}:H${row}`);
+  // receivedAt is stamped when the report is filed (the model has no separate createdAt).
+  sheet.getCell(`B${row}`).value = fmtDateTime(rr.receivedAt);
   row += 2;
 
   // --- Signature lines ---

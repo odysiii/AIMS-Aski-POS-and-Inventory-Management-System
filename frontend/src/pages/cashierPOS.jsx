@@ -5,9 +5,10 @@ import {
   Lock, Clock, Banknote, X, Percent, Download, ShieldCheck,
   Check, LayoutGrid, Package, ShoppingCart,
   Wallet, LogOut, KeyRound, CheckCircle2,
-  UserPlus, UserCheck, UserX, Printer, Receipt
+  UserPlus, UserCheck, UserX, Printer, Receipt, Ban
 } from 'lucide-react';
 import { CategoryIcon } from '../utils/CategoryIcon';
+import VoidSaleModal from './VoidSaleModal';
 import { exportCsv } from '../utils/exportCsv';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../auth/apiFetch';
@@ -63,6 +64,19 @@ function QtyInput({ value, onCommit }) {
     />
   );
 }
+
+// Turns the backend's print result ({ printed, reason, error, reprint }) into what the cashier sees.
+const describeZPrint = (print) => {
+  if (!print) return { ok: false, message: 'Print status unknown.' };
+  if (print.printed) return { ok: true, message: print.reprint ? 'Reprinted on the receipt printer.' : 'Printed on the receipt printer.' };
+  if (print.reason === 'not_configured') {
+    return { ok: false, message: 'Not printed: no receipt printer is set up for this computer (RECEIPT_PRINTER_INTERFACE in backend/.env). The reading is saved. Press Reprint once the printer is set up.' };
+  }
+  if (print.reason === 'unreachable') {
+    return { ok: false, message: "Not printed: the receipt printer isn't reachable. Check that it's on, connected and has paper, then press Reprint." };
+  }
+  return { ok: false, message: `Not printed: ${print.error || 'printer error'}. Press Reprint to try again.` };
+};
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -157,6 +171,8 @@ export default function CashierPOS() {
   const [isProcessingZRead, setIsProcessingZRead] = useState(false);
   const [zReadResult, setZReadResult] = useState(null);
   const [showZReadResultModal, setShowZReadResultModal] = useState(false);
+  const [isReprintingZ, setIsReprintingZ] = useState(false);
+  const [showVoidModal, setShowVoidModal] = useState(false);
 
   // Exchanges a supervisor PIN for a short-lived approval token (the PIN itself is never stored client-side).
   const requestApproval = async (body) => {
@@ -555,6 +571,8 @@ const handleConfirmSale = async () => {
     setEodFigures({
       gross: Number(data.grossSales) || 0,
       discount: Number(data.totalDiscount) || 0,
+      voidCount: Number(data.voidCount) || 0,
+      voidAmount: Number(data.voidAmount) || 0,
       net: Number(data.netSales) || 0,
     });
     setEodClosedReportNo(data.alreadyClosed ? data.closedReportNo : null);
@@ -574,6 +592,8 @@ const handleConfirmSale = async () => {
       grossSales: eodFigures.gross,
       pointsAvailed: 0.00,
       totalDiscount: eodFigures.discount,
+      voidCount: eodFigures.voidCount,
+      voidAmount: eodFigures.voidAmount,
       netSales: eodFigures.net,
 
       ...cashDenominations,
@@ -694,6 +714,22 @@ const handleConfirmSale = async () => {
     }
   };
 
+  const handleReprintZReading = async () => {
+    if (!zReadResult || isReprintingZ) return;
+    setIsReprintingZ(true);
+    let print;
+    try {
+      const res = await apiFetch(`http://localhost:5000/api/pos/z-reading/${zReadResult.id}/reprint`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      print = res.ok ? { ...data, reprint: true } : { printed: false, reason: 'error', error: data.error || 'Reprint failed' };
+    } catch (err) {
+      print = { printed: false, reason: 'error', error: err.message };
+    } finally {
+      setIsReprintingZ(false);
+    }
+    setZReadResult((prev) => ({ ...prev, print }));
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-100 via-blue-50/60 to-indigo-50/40 font-bold text-slate-500">
@@ -742,6 +778,14 @@ const handleConfirmSale = async () => {
                   {pendingSales.length}
                 </span>
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVoidModal(true)}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 hover:border-rose-300 hover:text-rose-600 px-3 sm:px-3.5 py-2 rounded-full text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Ban className="w-4 h-4" />
+              <span className="hidden sm:inline">Void Sale</span>
             </button>
             <button
               type="button"
@@ -868,19 +912,24 @@ const handleConfirmSale = async () => {
 
             {/* Product Grid */}
             <div className="flex-1 bg-white/80 rounded-2xl p-3 overflow-y-auto min-h-0 border border-indigo-100 shadow-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {filteredProducts.map((product) => (
                   <div
                     key={product.id}
                     onClick={() => handleAddToCart(product)}
-                    className="bg-white/90 rounded-2xl p-2.5 flex flex-col cursor-pointer border border-indigo-100/80 shadow-sm hover:border-blue-400 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-200"
+                    className="bg-white/90 rounded-2xl p-4 flex flex-col cursor-pointer border border-indigo-100/80 shadow-sm hover:border-blue-400 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-200"
                   >
-                    <div className="h-16 shrink-0 bg-indigo-50 rounded-xl w-full flex items-center justify-center mb-2">
-                      <CategoryIcon category={product.category} className="w-5 h-5 text-indigo-500" />
+                    <div className="h-10 shrink-0 bg-indigo-50 rounded-lg w-full flex items-center justify-center mb-3">
+                      <CategoryIcon category={product.category} className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <div
+                      className="line-clamp-2 break-words leading-tight min-h-[2rem] text-xs font-semibold text-slate-900 shrink-0 mb-1"
+                      title={product.name}
+                    >
+                      {product.name}
                     </div>
                     <div className="text-slate-800 font-medium text-xs shrink-0">
-                      <div className="truncate font-semibold text-slate-900">{product.name}</div>
-                      <div className="flex justify-between items-center mt-1.5">
+                      <div className="flex justify-between items-center mt-2.5">
                         <span className="text-slate-900 font-bold">
                           PHP {Number(product.sellingPrice || 0).toFixed(2)}
                         </span>
@@ -1426,6 +1475,8 @@ const handleConfirmSale = async () => {
         </div>
       )}
 
+      {showVoidModal && <VoidSaleModal onClose={() => setShowVoidModal(false)} onVoided={fetchProducts} />}
+
       {/* --- MODAL: Z-READING RESULT --- */}
       {showZReadResultModal && zReadResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -1441,9 +1492,18 @@ const handleConfirmSale = async () => {
             </div>
 
             <div className="p-5 space-y-3 overflow-y-auto text-xs">
-              <p className="text-slate-400 font-medium">
-                Sent to the receipt printer. {zReadResult.transactionCount} transaction(s) covered.
-              </p>
+              <p className="text-slate-400 font-medium">{zReadResult.transactionCount} transaction(s) covered.</p>
+              {(() => {
+                const status = describeZPrint(zReadResult.print);
+                return (
+                  <div
+                    role="status"
+                    className={`p-3 rounded-xl font-semibold border ${status.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}
+                  >
+                    {status.message}
+                  </div>
+                );
+              })()}
 
               <div className="bg-slate-50 rounded-xl p-3 space-y-1">
                 <div className="flex justify-between text-slate-500 font-medium">
@@ -1454,6 +1514,9 @@ const handleConfirmSale = async () => {
                 </div>
                 <div className="flex justify-between text-slate-500 font-medium">
                   <span>Total Discount</span><span>PHP {Number(zReadResult.totalDiscount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-500 font-medium">
+                  <span>Void ({zReadResult.voidCount || 0})</span><span>-PHP {Number(zReadResult.voidAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-900 font-bold pt-1 border-t border-slate-200">
                   <span>Net</span><span>PHP {Number(zReadResult.netSales).toFixed(2)}</span>
@@ -1497,10 +1560,20 @@ const handleConfirmSale = async () => {
               </div>
             </div>
 
-            <div className="p-5 border-t border-slate-100 shrink-0">
+            <div className="p-5 border-t border-slate-100 shrink-0 flex gap-2">
               <button
+                type="button"
+                onClick={handleReprintZReading}
+                disabled={isReprintingZ}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-blue-600 rounded-full text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Printer className="w-4 h-4" />
+                {isReprintingZ ? 'Printing…' : 'Reprint'}
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowZReadResultModal(false)}
-                className="w-full py-2.5 bg-[#0B132B] hover:shadow-slate-900/30 shadow-lg text-white rounded-full text-xs font-bold transition-all cursor-pointer"
+                className="flex-1 py-2.5 bg-[#0B132B] hover:shadow-slate-900/30 shadow-lg text-white rounded-full text-xs font-bold transition-all cursor-pointer"
               >
                 Done
               </button>
@@ -1583,6 +1656,11 @@ const handleConfirmSale = async () => {
                     PHP {expectedSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
+                {eodFigures.voidCount > 0 && (
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Includes {eodFigures.voidCount} void(s) today (PHP {eodFigures.voidAmount.toFixed(2)}); cash voids are already taken off the expected cash.
+                  </p>
+                )}
                 <div className="flex justify-between font-bold border-t border-indigo-200 pt-1 text-sm">
                   <span>Short / Over:</span>
                   <span className={shortOver < 0 ? "text-rose-600" : shortOver > 0 ? "text-emerald-600" : "text-slate-800"}>

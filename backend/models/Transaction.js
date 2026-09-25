@@ -38,6 +38,35 @@ const TransactionModel = {
     });
   },
 
+  // Everything a receipt needs for one past sale, in the shape receiptLayout.buildSaleReceipt
+  // takes. The POS doesn't record cash tendered, so — like the original printout — CASH shows the
+  // total and CHANGE shows 0. Returns null if the sale doesn't exist.
+  findReceiptData: async (id) => {
+    const transactionId = parseInt(id, 10);
+    if (!transactionId) return null;
+    const t = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        items: { orderBy: { id: 'asc' } },
+        cashier: { select: { username: true } },
+        saleVoid: { select: { voidNo: true } },
+      },
+    });
+    if (!t) return null;
+    return {
+      id: t.id,
+      transactionNo: t.transactionNo,
+      voidNo: t.saleVoid?.voidNo || null,
+      createdAt: t.createdAt,
+      cashier: t.cashier.username,
+      items: t.items.map((i) => ({ barcode: i.barcode, name: i.name, quantity: i.quantity, unitPrice: Number(i.unitPrice) })),
+      subtotal: Number(t.subtotal),
+      discountAmount: Number(t.discountAmount),
+      totalAmount: Number(t.totalAmount),
+      paymentMethod: t.paymentMethod,
+    };
+  },
+
   // One row per transaction for a given store-local calendar month (default: the current month),
   // for the Sales Report page. Transactions are fetched over a coarse UTC window (a day of slack on
   // each side) and filtered precisely with localDate, the same pattern loadForecastInput uses.
@@ -47,18 +76,30 @@ const TransactionModel = {
     const from = new Date(Date.UTC(year, mon - 1, 1) - 86400000);
     const to = new Date(Date.UTC(year, mon, 1) + 86400000);
 
-    const transactions = await prisma.transaction.findMany({
-      where: { createdAt: { gte: from, lt: to } },
-      include: {
-        items: { select: { quantity: true } },
-        cashier: { select: { username: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const inMonth = (d) => localDate(d, STORE_TIMEZONE).slice(0, 7) === targetMonth;
+    const [transactions, voids] = await Promise.all([
+      prisma.transaction.findMany({
+        where: { createdAt: { gte: from, lt: to } },
+        include: {
+          items: { select: { quantity: true } },
+          cashier: { select: { username: true } },
+          saleVoid: { select: { voidNo: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.saleVoid.findMany({
+        where: { createdAt: { gte: from, lt: to } },
+        include: {
+          transaction: { select: { transactionNo: true, items: { select: { quantity: true } } } },
+          voidedBy: { select: { username: true } },
+        },
+      }),
+    ]);
 
-    const rows = transactions
-      .filter((t) => localDate(t.createdAt, STORE_TIMEZONE).slice(0, 7) === targetMonth)
+    const saleRows = transactions
+      .filter((t) => inMonth(t.createdAt))
       .map((t) => ({
+        kind: 'SALE',
         id: t.id,
         transactionNo: t.transactionNo,
         createdAt: t.createdAt,
@@ -68,9 +109,32 @@ const TransactionModel = {
         totalAmount: t.totalAmount,
         paymentMethod: t.paymentMethod,
         cashier: t.cashier?.username || null,
+        voidNo: t.saleVoid?.voidNo || null,
       }));
 
-    const totals = rows.reduce(
+    // A void is its own row on the day it happened (the original sale's row stays, tagged with its
+    // voidNo). Its total is negative; gross and discount belong to the original sale's row.
+    const voidRows = voids
+      .filter((v) => inMonth(v.createdAt))
+      .map((v) => ({
+        kind: 'VOID',
+        id: `void-${v.id}`,
+        voidId: v.id,
+        transactionNo: v.voidNo,
+        voidOf: v.transaction.transactionNo,
+        createdAt: v.createdAt,
+        itemsCount: v.transaction.items.length,
+        subtotal: null,
+        discountAmount: null,
+        totalAmount: -Number(v.totalAmount),
+        paymentMethod: v.paymentMethod,
+        cashier: v.voidedBy?.username || null,
+        reason: v.reason,
+      }));
+
+    const rows = [...saleRows, ...voidRows].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const sales = saleRows.reduce(
       (acc, r) => ({
         count: acc.count + 1,
         subtotal: acc.subtotal + Number(r.subtotal),
@@ -79,6 +143,9 @@ const TransactionModel = {
       }),
       { count: 0, subtotal: 0, discountAmount: 0, totalAmount: 0 },
     );
+    const voidAmount = voidRows.reduce((sum, r) => sum - r.totalAmount, 0);
+    // Net = gross - discounts - voids, the same way the X- and Z-Readings count it.
+    const totals = { ...sales, voidCount: voidRows.length, voidAmount, totalAmount: sales.totalAmount - voidAmount };
 
     return { month: targetMonth, rows, totals };
   },

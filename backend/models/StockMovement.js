@@ -1,6 +1,6 @@
 const { prisma } = require('./Product');
 
-const STOCK_MOVEMENT_TYPES = ['OPENING', 'PURCHASE_RECEIPT', 'MANUAL_ADD', 'SALE', 'PURCHASE_RETURN', 'ADJUSTMENT'];
+const STOCK_MOVEMENT_TYPES = ['OPENING', 'PURCHASE_RECEIPT', 'MANUAL_ADD', 'SALE', 'PURCHASE_RETURN', 'ADJUSTMENT', 'VOID'];
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 100;
 // A hard ceiling on a single product's exported ledger, so a runaway export can't fetch the whole table.
@@ -81,9 +81,42 @@ const attachPoNumbers = (movements, poNumberByRrId) =>
     return poNumber ? { ...m, poNumber } : m;
   });
 
+// Voids, both ways round: a VOID row (referencing its SaleVoid) is priced from the voided sale's own
+// lines, since the void has no line items of its own; and a SALE row whose sale was later voided is
+// tagged with that void (`voidNo`/`voidId`) so the ledger can show "VOIDED" next to it.
+const loadVoidExtras = async (movements) => {
+  const voidIds = [...new Set(movements.filter((m) => m.referenceType === 'SaleVoid' && m.referenceId != null).map((m) => m.referenceId))];
+  const saleIds = [...new Set(movements.filter((m) => m.type === 'SALE' && m.referenceType === 'Transaction' && m.referenceId != null).map((m) => m.referenceId))];
+  const amountByKey = new Map();
+  const voidBySaleId = new Map();
+
+  if (voidIds.length) {
+    const voids = await prisma.saleVoid.findMany({ where: { id: { in: voidIds } }, select: { id: true, transactionId: true } });
+    const voidIdsBySale = new Map();
+    for (const v of voids) voidIdsBySale.set(v.transactionId, v.id);
+    const items = await prisma.transactionItem.findMany({
+      where: { transactionId: { in: [...voidIdsBySale.keys()] } },
+      select: { transactionId: true, productId: true, subtotal: true },
+    });
+    for (const item of items) {
+      const key = `SaleVoid:${voidIdsBySale.get(item.transactionId)}:${item.productId}`;
+      amountByKey.set(key, (amountByKey.get(key) || 0) + Number(item.subtotal));
+    }
+  }
+  if (saleIds.length) {
+    const voids = await prisma.saleVoid.findMany({ where: { transactionId: { in: saleIds } }, select: { id: true, voidNo: true, transactionId: true } });
+    for (const v of voids) voidBySaleId.set(v.transactionId, v);
+  }
+  return { amountByKey, voidBySaleId };
+};
+
 const withExtras = async (movements) => {
-  const [amountByKey, poNumberByRrId] = await Promise.all([loadAmounts(movements), loadPoNumbers(movements)]);
-  return attachPoNumbers(attachAmounts(movements, amountByKey), poNumberByRrId);
+  const [amountByKey, poNumberByRrId, voidExtras] = await Promise.all([loadAmounts(movements), loadPoNumbers(movements), loadVoidExtras(movements)]);
+  for (const [key, amount] of voidExtras.amountByKey) amountByKey.set(key, amount);
+  return attachPoNumbers(attachAmounts(movements, amountByKey), poNumberByRrId).map((m) => {
+    const v = m.type === 'SALE' && m.referenceType === 'Transaction' ? voidExtras.voidBySaleId.get(m.referenceId) : null;
+    return v ? { ...m, voidNo: v.voidNo, voidId: v.id } : m;
+  });
 };
 
 // Shared by findAll/findAllForExport: productId/type/from/to -> a Prisma `where` clause. `productId` is

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, History, Loader2, Inbox, Download, Layers } from 'lucide-react';
 import { apiFetch } from '../../auth/apiFetch';
+import ReceiptPreviewModal, { LedgerReference } from './ReceiptPreviewModal';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 const PAGE_SIZE = 50;
@@ -14,6 +15,7 @@ const TYPE_LABELS = {
   SALE: 'Sale',
   PURCHASE_RETURN: 'Returned to supplier',
   ADJUSTMENT: 'Adjustment',
+  VOID: 'Void (returned)',
 };
 
 // Mirrors StockBatch.referenceType on the backend.
@@ -28,6 +30,7 @@ const BATCH_SOURCE_LABELS = {
 // `exportToExcel` (from inventoryList.jsx) is optional — without it the Export button is hidden.
 export default function StockHistoryModal({ product, onClose, exportToExcel }) {
   const [tab, setTab] = useState('ledger'); // 'ledger' | 'batches'
+  const [receiptTarget, setReceiptTarget] = useState(null); // { kind: 'sale' | 'void', id }
 
   const [movements, setMovements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -280,7 +283,7 @@ export default function StockHistoryModal({ product, onClose, exportToExcel }) {
                       {m.amount != null ? peso(m.amount) : <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {m.referenceNo && <span className="font-mono text-slate-700">{m.referenceNo}</span>}
+                      <LedgerReference movement={m} onOpen={setReceiptTarget} />
                       {m.poNumber && <span className="text-slate-400"> ({m.poNumber})</span>}
                       {m.referenceNo && m.reason ? ' — ' : ''}
                       {m.reason}
@@ -375,6 +378,7 @@ export default function StockHistoryModal({ product, onClose, exportToExcel }) {
           )}
         </div>
       </div>
+      {receiptTarget && <ReceiptPreviewModal kind={receiptTarget.kind} id={receiptTarget.id} onClose={() => setReceiptTarget(null)} />}
     </div>,
     document.body
   );

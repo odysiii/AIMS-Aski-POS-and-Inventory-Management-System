@@ -1,5 +1,6 @@
 const ExcelJS = require('exceljs');
 const { COMPANY } = require('./purchaseOrderExcel');
+const { fmtDateTime } = require('./excelDateTime');
 
 const THIN = { style: 'thin' };
 const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
@@ -173,6 +174,11 @@ async function buildPurchaseReturnWorkbook(pr) {
   sheet.getCell(`A${row}`).font = { bold: true };
   sheet.mergeCells(`B${row}:F${row}`);
   sheet.getCell(`B${row}`).value = pr.remarks || '-';
+  row++;
+  sheet.getCell(`A${row}`).value = 'CREATED AT :';
+  sheet.getCell(`A${row}`).font = { bold: true };
+  sheet.mergeCells(`B${row}:F${row}`);
+  sheet.getCell(`B${row}`).value = fmtDateTime(pr.createdAt);
 
   return workbook;
 }

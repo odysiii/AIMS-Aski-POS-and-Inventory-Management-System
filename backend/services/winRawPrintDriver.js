@@ -43,10 +43,11 @@ function printDirect({ data, printer, docname, success, error }) {
     }
 
     const target = `\\\\localhost\\${printer}`;
-    exec(`copy /b "${tempFile}" "${target}"`, (execErr, stdout, stderr) => {
+    // Bounded, so a hung print queue can't stall a request that waits on the result.
+    exec(`copy /b "${tempFile}" "${target}"`, { timeout: 15000 }, (execErr, stdout, stderr) => {
       fs.unlink(tempFile, () => {});
       if (execErr) {
-        error(new Error(stderr || execErr.message));
+        error(new Error(String(stderr || execErr.message).trim()));
         return;
       }
       success(docname || 'raw-print');

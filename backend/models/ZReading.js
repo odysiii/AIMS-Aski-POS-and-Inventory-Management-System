@@ -65,15 +65,27 @@ const buildSummary = async (client, cashierId) => {
   const first = transactions[0] || null;
   const last = transactions[transactions.length - 1] || null;
 
-  // Store-wide (every cashier, not just this one) cumulative sales as of the last transaction
-  // this reading covers — so New Grand Total always advances by exactly this reading's own net
-  // sales, the same way it does on a real machine's printout.
-  const cutoff = last ? last.createdAt : new Date();
-  const grandTotalAgg = await client.transaction.aggregate({
-    _sum: { totalAmount: true },
-    where: { createdAt: { lte: cutoff } },
+  // Voids this cashier performed in the same window count here (the day they happen), whichever
+  // day the voided sale itself was rung up.
+  const voids = await client.saleVoid.findMany({
+    where: { voidedById: cashierId, createdAt: { gt: since } },
+    select: { totalAmount: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
   });
-  const grandTotalAfter = Number(grandTotalAgg._sum.totalAmount || 0);
+  const voidAmount = voids.reduce((sum, v) => sum + Number(v.totalAmount), 0);
+  netSales -= voidAmount;
+
+  // Store-wide (every cashier, not just this one) cumulative sales, less all voids, as of the last
+  // sale or void this reading covers — so New Grand Total always advances by exactly this
+  // reading's own net, the same way it does on a real machine's printout.
+  const lastVoid = voids[voids.length - 1] || null;
+  const lastEvent = [last?.createdAt, lastVoid?.createdAt].filter(Boolean).sort((a, b) => a - b).pop();
+  const cutoff = lastEvent || new Date();
+  const [grandTotalAgg, grandVoidAgg] = await Promise.all([
+    client.transaction.aggregate({ _sum: { totalAmount: true }, where: { createdAt: { lte: cutoff } } }),
+    client.saleVoid.aggregate({ _sum: { totalAmount: true }, where: { createdAt: { lte: cutoff } } }),
+  ]);
+  const grandTotalAfter = Number(grandTotalAgg._sum.totalAmount || 0) - Number(grandVoidAgg._sum.totalAmount || 0);
   const grandTotalBefore = grandTotalAfter - netSales;
 
   return {
@@ -85,6 +97,8 @@ const buildSummary = async (client, cashierId) => {
     grossSales,
     totalDiscount,
     pointsAvailed: 0, // no points-redemption feature yet — always 0 until one exists
+    voidCount: voids.length,
+    voidAmount,
     netSales,
     grandTotalBefore,
     grandTotalAfter,
@@ -129,6 +143,18 @@ const ZReadingModel = {
       },
       { timeout: 20000 },
     );
+  },
+
+  findById: async (id) => {
+    const zId = parseInt(id, 10);
+    if (!zId) return null;
+    return prisma.zReadingLog.findUnique({
+      where: { id: zId },
+      include: {
+        cashier: { select: { username: true, fullName: true } },
+        approvedBy: { select: { username: true } },
+      },
+    });
   },
 
   findAll: async ({ cashierId } = {}) => {

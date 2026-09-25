@@ -1,5 +1,6 @@
 const ExcelJS = require('exceljs');
 const { VAT_RATE } = require('../models/PurchaseOrder');
+const { fmtDateTime } = require('./excelDateTime');
 
 // The coop's own info — this is always "Ship To" on a Purchase Order, since we're the buyer.
 const COMPANY = {
@@ -205,7 +206,12 @@ async function buildPurchaseOrderWorkbook(po) {
   sheet.getCell(`A${row}`).font = { bold: true };
   sheet.mergeCells(`B${row}:I${row}`);
   sheet.getCell(`B${row}`).value =
-    [po.tagging && po.tagging !== 'Regular' ? `[${po.tagging}]` : '', po.purpose, po.remarks].filter(Boolean).join(' ') || '-';
+    [po.tagging ? `[${po.tagging}]` : '', po.purpose, po.remarks].filter(Boolean).join(' ') || '-';
+  row++;
+  sheet.getCell(`A${row}`).value = 'CREATED AT :';
+  sheet.getCell(`A${row}`).font = { bold: true };
+  sheet.mergeCells(`B${row}:I${row}`);
+  sheet.getCell(`B${row}`).value = fmtDateTime(po.createdAt);
   row += 2;
 
   // --- Signature lines ---

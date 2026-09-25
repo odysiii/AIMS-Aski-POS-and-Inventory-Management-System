@@ -16,6 +16,7 @@ const { StockMovementModel, STOCK_MOVEMENT_TYPES } = require('./models/StockMove
 const { StockBatchModel } = require('./models/StockBatch');
 const { ReconciliationReportModel } = require('./models/ReconciliationReport');
 const { ZReadingModel } = require('./models/ZReading');
+const { SaleVoidModel } = require('./models/SaleVoid');
 const TransactionModel = require('./models/Transaction');
 const ReconciliationModel = require('./models/Reconciliation');
 const DashboardModel = require('./models/Dashboard');
@@ -46,6 +47,7 @@ const expiryAlerts = require('./services/expiryAlerts');
 const forecastAlerts = require('./services/forecastAlerts');
 const forecastSnapshots = require('./services/forecastSnapshots');
 const receiptPrinter = require('./services/receiptPrinter');
+const { WIDTH: RECEIPT_WIDTH, renderToText, buildSaleReceipt, buildVoidReceipt } = require('./services/receiptLayout');
 const posApproval = require('./services/posApproval');
 
 const app = express();
@@ -810,7 +812,8 @@ app.post('/api/transactions', authenticateToken, requireRole(...ROLES.POS), asyn
     receiptPrinter
       .printReceipt({
         cashier: req.user.username,
-        transactionId: result.transactionNo || result.id,
+        transactionNo: result.transactionNo || result.id,
+        createdAt: result.createdAt,
         items: result.items,
         subtotal: result.subtotal,
         discountAmount: result.discountAmount,
@@ -848,6 +851,34 @@ app.post('/api/print/receipt', authenticateToken, requireRole(...ROLES.POS), asy
     res.json(result);
   } catch (error) {
     console.error('Manual receipt print failed:', error);
+    res.status(500).json({ printed: false, reason: 'error', error: error.message });
+  }
+});
+
+// A past sale's receipt as on-screen text, character-for-character what a reprint puts on paper
+// (so it carries the REPRINT marker too). Opened by clicking a sale in the Subsidiary Ledger or a
+// product's Stock History, so it has the same roles as those screens.
+app.get('/api/transactions/:id/receipt', authenticateToken, requireRole(...ROLES.INVENTORY_READ), async (req, res) => {
+  try {
+    const sale = await TransactionModel.findReceiptData(req.params.id);
+    if (!sale) return res.status(404).json({ error: 'Transaction not found' });
+    const lines = renderToText(buildSaleReceipt(sale, { reprintedAt: new Date() }));
+    res.json({ id: sale.id, reference: sale.transactionNo, createdAt: sale.createdAt, width: RECEIPT_WIDTH, lines });
+  } catch (error) {
+    console.error('Error building receipt preview:', error);
+    res.status(500).json({ error: 'Failed to load receipt' });
+  }
+});
+
+// Reprints a past sale's receipt on the thermal printer (marked REPRINT). Unlike the checkout
+// print this waits for the printer, so the screen can say whether it actually printed.
+app.post('/api/transactions/:id/reprint', authenticateToken, requireRole(...ROLES.INVENTORY_READ), async (req, res) => {
+  try {
+    const sale = await TransactionModel.findReceiptData(req.params.id);
+    if (!sale) return res.status(404).json({ error: 'Transaction not found' });
+    res.json(await receiptPrinter.printReceipt(sale, { reprint: true }));
+  } catch (error) {
+    console.error('Error reprinting receipt:', error);
     res.status(500).json({ printed: false, reason: 'error', error: error.message });
   }
 });
@@ -1024,12 +1055,12 @@ app.post('/api/pos/z-reading', authenticateToken, requireRole(...ROLES.POS), asy
     const report = await ZReadingModel.create(req.user.id, approval.approverId);
     posApproval.consumeApproval(approval);
 
-    res.status(201).json(report);
-
-    // Fire-and-forget silent print, same pattern as the checkout receipt — never blocks or fails the request.
-    receiptPrinter
+    // The reading is already saved; printing is waited on only so the POS can say whether it
+    // actually printed (and why not), instead of assuming it did. A print failure never fails this.
+    const print = await receiptPrinter
       .printZReading(report)
-      .catch((err) => console.error('[receipt-printer] Unexpected Z-Reading print error:', err.message));
+      .catch((err) => ({ printed: false, reason: 'error', error: err.message }));
+    res.status(201).json({ ...report, print });
   } catch (error) {
     if (error instanceof posApproval.ApprovalError || error instanceof ZReadingModel.ZReadingError) {
       return res.status(error.status).json({ error: error.message, code: error.code });
@@ -1048,6 +1079,108 @@ app.get('/api/pos/z-reading', authenticateToken, requireRole(...ROLES.POS), asyn
   } catch (error) {
     console.error('Error fetching Z-Readings:', error);
     res.status(500).json({ error: 'Failed to fetch Z-Readings' });
+  }
+});
+
+// Reprints a saved Z-Reading (marked REPRINT) — e.g. after the printer was off or out of paper. A
+// cashier may reprint only their own; a supervisor/admin, anyone's. Nothing is recomputed.
+app.post('/api/pos/z-reading/:id/reprint', authenticateToken, requireRole(...ROLES.POS), async (req, res) => {
+  try {
+    const report = await ZReadingModel.findById(req.params.id);
+    const canReprintOthers = req.user.role === 'SUPERVISOR' || req.user.role === 'ADMIN';
+    if (!report || (!canReprintOthers && report.cashierId !== req.user.id)) {
+      return res.status(404).json({ error: 'Z-Reading not found' });
+    }
+    res.json(await receiptPrinter.printZReading(report, { reprint: true }));
+  } catch (error) {
+    console.error('Error reprinting Z-Reading:', error);
+    res.status(500).json({ printed: false, reason: 'error', error: error.message });
+  }
+});
+
+// --- VOID SALE (supervisor-gated) ---
+
+// Void receipts are opened from the POS and from the ledger, so both groups can view/reprint them.
+const VOID_RECEIPT_ROLES = [...new Set([...ROLES.POS, ...ROLES.INVENTORY_READ])];
+
+const sendVoidError = (res, error) => {
+  if (error instanceof posApproval.ApprovalError || error instanceof SaleVoidModel.VoidError) {
+    res.status(error.status).json({ error: error.message, code: error.code });
+    return true;
+  }
+  return false;
+};
+
+// The POS "Void Sale" picker: the signed-in user's sales since their last Z-Reading, or, with
+// ?search=, any sale whose transaction number contains it. Each says whether it can be voided.
+app.get('/api/pos/sales', authenticateToken, requireRole(...ROLES.POS), async (req, res) => {
+  try {
+    res.json(await SaleVoidModel.listForPos({ userId: req.user.id, search: req.query.search }));
+  } catch (error) {
+    console.error('Error listing sales for void:', error);
+    res.status(500).json({ error: 'Failed to load sales' });
+  }
+});
+
+// Voids a completed sale: stock and FIFO batches restored, member points reversed, and the void
+// slip printed. Needs a supervisor approval token (POST /api/pos/approve with action VOID) in
+// X-Approval-Token, and a reason. Like the Z-Reading, it waits for the printer so the POS can say
+// whether the slip actually printed; the void itself is already saved either way.
+app.post('/api/pos/voids', authenticateToken, requireRole(...ROLES.POS), async (req, res) => {
+  try {
+    const approval = await posApproval.verifyApproval(req.headers['x-approval-token'], {
+      action: 'VOID',
+      cashierId: req.user.id,
+    });
+    const { saleVoid, productIds } = await SaleVoidModel.create({
+      transactionId: req.body.transactionId,
+      reason: req.body.reason,
+      voidedById: req.user.id,
+      approvedById: approval.approverId,
+    });
+    posApproval.consumeApproval(approval);
+
+    const io = req.app.get('io');
+    ProductModel.findManyFormatted(productIds)
+      .then((products) => io.to(DASHBOARD_ROOM).emit('stock_updated', { products }))
+      .catch((err) => console.error('Error broadcasting stock after void:', err.message));
+    FinanceModel.getSummary()
+      .then((summary) => io.to(FINANCE_ROOM).emit('finance_updated', summary))
+      .catch((err) => console.error('Error broadcasting finance after void:', err.message));
+
+    const receipt = await SaleVoidModel.findReceiptData(saleVoid.id);
+    const print = await receiptPrinter
+      .printVoidReceipt(receipt)
+      .catch((err) => ({ printed: false, reason: 'error', error: err.message }));
+    res.status(201).json({ ...saleVoid, print });
+  } catch (error) {
+    if (sendVoidError(res, error)) return;
+    console.error('Error voiding sale:', error);
+    res.status(500).json({ error: 'Failed to void the sale' });
+  }
+});
+
+// A void slip as on-screen text, exactly what a reprint puts on paper (REPRINT-marked).
+app.get('/api/voids/:id/receipt', authenticateToken, requireRole(...VOID_RECEIPT_ROLES), async (req, res) => {
+  try {
+    const data = await SaleVoidModel.findReceiptData(req.params.id);
+    if (!data) return res.status(404).json({ error: 'Void not found' });
+    const lines = renderToText(buildVoidReceipt(data, { reprintedAt: new Date() }));
+    res.json({ id: data.id, reference: data.voidNo, createdAt: data.voidedAt, width: RECEIPT_WIDTH, lines });
+  } catch (error) {
+    console.error('Error building void receipt preview:', error);
+    res.status(500).json({ error: 'Failed to load void receipt' });
+  }
+});
+
+app.post('/api/voids/:id/reprint', authenticateToken, requireRole(...VOID_RECEIPT_ROLES), async (req, res) => {
+  try {
+    const data = await SaleVoidModel.findReceiptData(req.params.id);
+    if (!data) return res.status(404).json({ error: 'Void not found' });
+    res.json(await receiptPrinter.printVoidReceipt(data, { reprint: true }));
+  } catch (error) {
+    console.error('Error reprinting void receipt:', error);
+    res.status(500).json({ printed: false, reason: 'error', error: error.message });
   }
 });
 

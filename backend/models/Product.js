@@ -19,7 +19,8 @@ class ProductError extends Error {
 
 const MAX_PRICE = 99999999.99;
 const MAX_COUNT = 100000000;
-const ADJUSTMENT_REASONS = ['Damaged', 'Expired', 'Lost / Theft', 'Count correction', 'Other'];
+// Past adjustments keep whatever reason they were saved with (e.g. the older 'Count correction').
+const ADJUSTMENT_REASONS = ['Damaged', 'Expired', 'Lost/Theft', 'Pull Out', 'Bad Order', 'Printing Forms', 'Retail', 'For Adjustment'];
 
 const parseMoney = (value, label) => {
   const n = Number(value);
@@ -277,7 +278,6 @@ const ProductModel = {
       throw new ProductError(400, `Reason must be one of: ${ADJUSTMENT_REASONS.join(', ')}.`);
     }
     const cleanNotes = typeof notes === 'string' ? notes.trim().slice(0, 255) : '';
-    if (reason === 'Other' && !cleanNotes) throw new ProductError(400, 'Please describe the reason for "Other".');
 
     const hasChange = quantityChange !== undefined && quantityChange !== null && quantityChange !== '';
     const hasCount = countedQuantity !== undefined && countedQuantity !== null && countedQuantity !== '';

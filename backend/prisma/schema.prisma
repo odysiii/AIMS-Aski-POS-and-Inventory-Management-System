@@ -43,6 +43,7 @@ enum StockMovementType {
   SALE
   PURCHASE_RETURN
   ADJUSTMENT
+  VOID // a voided sale's items coming back onto the shelf (references the SaleVoid)
 }
 
 // MODELS
@@ -69,6 +70,8 @@ model User {
   auditTargets         AuditLog[]        @relation("AuditTarget")
   zReadingsAsCashier   ZReadingLog[]     @relation("ZReadingCashier")
   zReadingsAsApprover  ZReadingLog[]     @relation("ZReadingApprover")
+  voidsPerformed       SaleVoid[]        @relation("VoidPerformer")
+  voidsApproved        SaleVoid[]        @relation("VoidApprover")
 }
 
 model Supplier {
@@ -196,7 +199,8 @@ model Transaction {
   createdAt DateTime @default(now())
 
   items          TransactionItem[]
-  pointsLedger   MemberPointsLedger?
+  pointsLedger   MemberPointsLedger[]
+  saleVoid       SaleVoid?
 }
 
 // A "Balik Tangkilik" loyalty member. The card number is derived from `id` (zero-padded to 6
@@ -216,8 +220,9 @@ model Member {
   pointsLedger MemberPointsLedger[]
 }
 
-// Append-only log of points earned per sale, so a member's balance can always be explained.
-// There is only one entry type today (points earned at checkout); redemption is a later phase.
+// Append-only log of a member's points, so their balance can always be explained. EARN: points
+// earned at checkout (positive). VOID: those same points taken back when the sale is voided
+// (negative). Redemption is a later phase.
 model MemberPointsLedger {
   id       Int    @id @default(autoincrement())
   memberId Int
@@ -226,13 +231,46 @@ model MemberPointsLedger {
   transactionId Int
   transaction   Transaction @relation(fields: [transactionId], references: [id])
 
-  points       Decimal @db.Decimal(10, 2) // always positive for now (points earned this sale)
+  type         String  @default("EARN") // EARN | VOID
+  points       Decimal @db.Decimal(10, 2) // signed: + earned, - reversed by a void
   balanceAfter Decimal @db.Decimal(10, 2)
 
   createdAt DateTime @default(now())
 
-  @@unique([transactionId]) // a sale can only earn points once
+  @@unique([transactionId, type]) // a sale earns points once, and is reversed at most once
   @@index([memberId, createdAt])
+}
+
+// A voided sale. The original Transaction is never changed or deleted; this record is the void
+// itself, and it counts on the day it happens (the X-/Z-Reading of whoever voided it, that day's
+// sales report), leaving earlier reports and printed readings as they were. Amounts are snapshots
+// of the original sale. Sales imported from before AIMS went live (before 2026-08-01) can't be
+// voided — they have no stock ledger or FIFO batch records to reverse.
+model SaleVoid {
+  id     Int    @id @default(autoincrement())
+  voidNo String @unique
+
+  transactionId Int         @unique // a sale can only be voided once
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  voidedById Int
+  voidedBy   User @relation("VoidPerformer", fields: [voidedById], references: [id])
+
+  approvedById Int
+  approvedBy   User @relation("VoidApprover", fields: [approvedById], references: [id])
+
+  reason String
+
+  subtotal       Decimal       @db.Decimal(10, 2)
+  discountAmount Decimal       @db.Decimal(10, 2)
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod
+  pointsReversed Decimal       @default(0) @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([voidedById, createdAt])
+  @@index([createdAt])
 }
 
 model TransactionItem {
@@ -305,6 +343,11 @@ model Reconciliation {
   cashierCash Decimal @default(0) @db.Decimal(10, 2)
   shortOver   Decimal @default(0) @db.Decimal(10, 2)
 
+  // Sales this cashier voided that day (SaleVoid.totalAmount); already taken out of netSales and,
+  // for cash voids, out of posCash.
+  voidCount  Int     @default(0)
+  voidAmount Decimal @default(0) @db.Decimal(10, 2)
+
   status       ReconciliationStatus @default(COMPLETED)
   notes        String?              @db.Text
   businessDate String?
@@ -340,6 +383,10 @@ model ZReadingLog {
   grossSales    Decimal @db.Decimal(12, 2)
   totalDiscount Decimal @db.Decimal(12, 2)
   pointsAvailed Decimal @default(0) @db.Decimal(12, 2)
+  // Voids this cashier performed in the same window (SaleVoid.totalAmount). netSales is
+  // grossSales - totalDiscount - voidAmount.
+  voidCount     Int     @default(0)
+  voidAmount    Decimal @default(0) @db.Decimal(12, 2)
   netSales      Decimal @db.Decimal(12, 2)
 
   // Store-wide (every cashier) cumulative sales total, not just this cashier's — see

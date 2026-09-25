@@ -17,14 +17,14 @@ import SupplierCombobox from './SupplierCombobox';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 const VAT_RATE = 0.12;
-const TAGGING_OPTIONS = ['Regular', 'Urgent', 'Rush', 'Special Order'];
+const TAGGING_OPTIONS = ['COOP STORE', 'WATER HOPE', 'COCA COLA', 'JAZZ EAT', 'BIGASAN', 'PRINTING'];
 
 const emptyHeader = {
   poDate: () => new Date().toISOString().slice(0, 10),
   supplierId: '',
   shipTo: '',
   shippingAddress: '',
-  tagging: 'Regular',
+  tagging: '',
   purpose: '',
   remarks: '',
   terms: 'N/A',
@@ -338,6 +338,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, products, mo
   const validateForm = () => {
     if (!supplierId && !supplierText.trim()) return 'Select or type a supplier for this purchase order.';
     if (lineItems.length === 0) return 'Add at least one item to the purchase order.';
+    if (!TAGGING_OPTIONS.includes(tagging)) return 'Choose a Tagging (which store this order is for).';
     return null;
   };
 
@@ -490,6 +491,11 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, products, mo
               <div>
                 <label className={fieldLabelClass}>Tagging</label>
                 <select disabled={isViewMode} value={tagging} onChange={(e) => setTagging(e.target.value)} className={darkFieldClass}>
+                  <option value="" disabled>Select store…</option>
+                  {/* Orders saved before the store list existed keep their old tag (e.g. "Regular"). */}
+                  {tagging && !TAGGING_OPTIONS.includes(tagging) && (
+                    <option value={tagging} disabled>{tagging} (old tag)</option>
+                  )}
                   {TAGGING_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
