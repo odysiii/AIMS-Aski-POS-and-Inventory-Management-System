@@ -1,0 +1,100 @@
+AIMS POS & INVENTORY - DEPLOYMENT ARCHITECTURE (SIMPLE VERSION)
+
+All PCs are Windows 10. There is no Windows 7 PC anymore.
+
+
+THE IDEA
+--------
+- One "store server" PC runs the whole system.
+- Every other device only opens a web page.
+- The database lives on the store server, so selling keeps working even when the internet is down.
+- The owner reaches the same system from outside through a secure tunnel.
+
+
+DIAGRAM
+-------
+
+   CASHIER PC(s)  (Windows 10)              OWNER / ADMIN (remote)
+   - browser only                           - browser on phone or laptop
+   - opens http://SERVER:5000               - opens https://your-address
+   - USB thermal printer (TM-T82X)                    |
+          |                                           | secure tunnel
+          | store network (LAN)                       | (Cloudflare Tunnel
+          |                                           |  or Tailscale)
+          v                                           v
+   +------------------------------------------------------------+
+   |                  STORE SERVER PC  (Windows 10)             |
+   |                                                            |
+   |   Frontend (built web app)  --served by-->  Backend        |
+   |   Backend   : Node.js, port 5000 (API + live updates)      |
+   |   Database  : PostgreSQL, port 5432 (this PC only)         |
+   |   AI service: Python, port 8000 (this PC only, forecasts)  |
+   |   Backups   : nightly database backup                      |
+   +------------------------------------------------------------+
+          |
+          | receipts / X-Reading / Z-Reading / void slips
+          v
+   Sent to the thermal printer through a Windows printer share
+   (printer plugged into the cashier PC), or directly if the
+   printer is plugged into the server itself.
+
+
+WHAT RUNS WHERE
+---------------
+- Store server PC:
+  - Node backend
+  - PostgreSQL
+  - Python AI service
+  - The web app
+  - Backups
+  - The tunnel
+  - Always on during store hours
+- Cashier PC:
+  - A browser
+  - The printer driver (nothing else installed)
+- Owner (remote):
+  - A browser, through the tunnel
+  - No router ports opened
+
+
+PRINTING
+--------
+- The backend sends the receipt to the printer; the cashier does nothing.
+- Printer on the cashier PC:
+  - Share it in Windows.
+  - On the server set RECEIPT_PRINTER_INTERFACE=printer:\\CASHIER-PC\TM-T82X
+  - Needs a small code change (today it only supports the same PC).
+- Printer on the server PC:
+  - Set RECEIPT_PRINTER_INTERFACE=printer:TM-T82X
+  - Works today, no change needed.
+- If the PC holding the printer is off, receipts do not print.
+
+
+SECURITY (BASICS)
+-----------------
+- Postgres and the AI service accept connections from the server itself only.
+- Windows Firewall lets only the store network reach the backend.
+- Remote access only through the tunnel, protected by a login.
+- Demo passwords and the supervisor PIN 1234 are replaced before go-live.
+
+
+DATA SAFETY
+-----------
+- Nightly database backup on the server, kept 14 days.
+- A copy is also kept off the server (external drive or cloud folder).
+- The restore is tested once before go-live.
+- The current real database is moved to the server as is.
+
+
+HOW IT STARTS AND UPDATES
+-------------------------
+- Start:
+  - Backend, AI service and PostgreSQL start automatically when the server boots.
+  - They restart if they crash (Windows services).
+- Update:
+  - Back up.
+  - Pull the new code.
+  - Apply database changes.
+  - Build the web app.
+  - Restart the services.
+
