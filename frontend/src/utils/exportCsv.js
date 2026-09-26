@@ -118,6 +118,10 @@ export const exportCsv = (dataOverride = null) => {
                 <td class="label">TOTAL DISCOUNT</td>
                 <td class="val">${formatMoney(r.totalDiscount)}</td>
               </tr>
+              <tr>
+                <td class="label">VOID (${Number(r.voidCount || 0)})</td>
+                <td class="val">-${formatMoney(r.voidAmount)}</td>
+              </tr>
             </table>
 
             <div class="solid-divider"></div>

@@ -51,7 +51,7 @@ const ReconciliationReportModel = {
     const openingCutoff = new Date(Date.parse(`${from}T00:00:00Z`) - MS_PER_DAY);
     const rangeUpperBound = new Date(Date.parse(`${to}T00:00:00Z`) + 2 * MS_PER_DAY);
 
-    const [openingRows, movements, transactions] = await Promise.all([
+    const [openingRows, movements, transactions, voids] = await Promise.all([
       prisma.$queryRaw`
         SELECT DISTINCT ON ("productId") "productId", "balanceAfter"
         FROM "StockMovement"
@@ -66,6 +66,10 @@ const ReconciliationReportModel = {
       prisma.transaction.findMany({
         where: { createdAt: { gte: openingCutoff, lt: rangeUpperBound } },
         select: { id: true, transactionNo: true, createdAt: true, subtotal: true, discountAmount: true, totalAmount: true },
+      }),
+      prisma.saleVoid.findMany({
+        where: { createdAt: { gte: openingCutoff, lt: rangeUpperBound } },
+        select: { id: true, voidNo: true, createdAt: true, totalAmount: true },
       }),
     ]);
 
@@ -92,6 +96,7 @@ const ReconciliationReportModel = {
           manualAdd: 0,
           returned: 0,
           sold: 0,
+          voided: 0,
           adjustment: 0,
           lastBalanceAfter: null,
         });
@@ -102,6 +107,7 @@ const ReconciliationReportModel = {
       else if (m.type === 'MANUAL_ADD') row.manualAdd += qty;
       else if (m.type === 'PURCHASE_RETURN') row.returned += -qty; // positive magnitude
       else if (m.type === 'SALE') row.sold += -qty; // positive magnitude
+      else if (m.type === 'VOID') row.voided += qty; // a voided sale's items back on the shelf
       else if (m.type === 'ADJUSTMENT') row.adjustment += qty; // signed net
       row.lastBalanceAfter = m.balanceAfter;
     }
@@ -120,7 +126,7 @@ const ReconciliationReportModel = {
     const stockRows = [...byProduct.values()]
       .map((row) => {
         const opening = openingByProduct.get(row.productId) || 0;
-        const expectedClosing = opening + row.received + row.manualAdd - row.returned - row.sold + row.adjustment;
+        const expectedClosing = opening + row.received + row.manualAdd - row.returned - row.sold + row.voided + row.adjustment;
         const actualClosing = coversToday ? currentStockById.get(row.productId) : row.lastBalanceAfter;
         return {
           productId: row.productId,
@@ -131,6 +137,7 @@ const ReconciliationReportModel = {
           manualAdd: row.manualAdd,
           returned: row.returned,
           sold: row.sold,
+          voided: row.voided,
           adjustment: row.adjustment,
           expectedClosing,
           actualClosing,
@@ -156,6 +163,18 @@ const ReconciliationReportModel = {
     const posDiscounts = txInRange.reduce((s, t) => s + Number(t.discountAmount), 0);
     const posNetSales = txInRange.reduce((s, t) => s + Number(t.totalAmount), 0);
 
+    // Every void in range must have put its stock back through VOID ledger rows.
+    const voidsInRange = voids.filter((v) => {
+      const d = localDate(v.createdAt, STORE_TIMEZONE);
+      return d >= from && d <= to;
+    });
+    const voidIdsWithMovement = new Set(
+      inRange.filter((m) => m.type === 'VOID' && m.referenceType === 'SaleVoid').map((m) => m.referenceId),
+    );
+    const voidsWithoutMovements = voidsInRange
+      .filter((v) => !voidIdsWithMovement.has(v.id))
+      .map((v) => ({ id: v.id, voidNo: v.voidNo, totalAmount: Number(v.totalAmount) }));
+
     return {
       from,
       to,
@@ -171,8 +190,12 @@ const ReconciliationReportModel = {
         posNetSales,
         ledgerSaleMovementCount: saleMovements.length,
         ledgerSaleRevenue,
-        mismatch: !roundedEq(posGrossSales, ledgerSaleRevenue) || transactionsWithoutMovements.length > 0,
+        voidCount: voidsInRange.length,
+        voidAmount: voidsInRange.reduce((s, v) => s + Number(v.totalAmount), 0),
+        mismatch:
+          !roundedEq(posGrossSales, ledgerSaleRevenue) || transactionsWithoutMovements.length > 0 || voidsWithoutMovements.length > 0,
         transactionsWithoutMovements,
+        voidsWithoutMovements,
       },
     };
   },
@@ -181,4 +204,4 @@ const ReconciliationReportModel = {
 ReconciliationReportModel.ReconciliationError = ReconciliationError;
 ReconciliationReportModel.FLOOR_DATE = FLOOR_DATE;
 
-module.exports = { ReconciliationReportModel };
+module.exports = { ReconciliationReportModel, FLOOR_DATE };

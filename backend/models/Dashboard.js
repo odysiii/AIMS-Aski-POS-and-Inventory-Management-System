@@ -5,17 +5,13 @@ const DashboardModel = {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        const result = await prisma.transaction.aggregate({
-            _sum: {
-                totalAmount: true,
-            },
-            where: {
-                createdAt: {
-                    gte: startOfToday,
-                },
-            },
-        });
-        return result._sum.totalAmount || 0;
+        const where = { createdAt: { gte: startOfToday } };
+        const [sales, voids] = await Promise.all([
+            prisma.transaction.aggregate({ _sum: { totalAmount: true }, where }),
+            // Voids made today come off today's revenue, whichever day the sale was rung up.
+            prisma.saleVoid.aggregate({ _sum: { totalAmount: true }, where }),
+        ]);
+        return Number(sales._sum.totalAmount || 0) - Number(voids._sum.totalAmount || 0);
     },
 
     getLowStockCount: async (threshold = 10) => {
@@ -34,12 +30,16 @@ const DashboardModel = {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+        // Sales per day, less the voids made that day (voids count on the day they happen).
         const rawData = await prisma.$queryRaw`
-    SELECT 
+    SELECT
       TO_CHAR("createdAt", 'Mon DD') AS day,
-      SUM("totalAmount")::FLOAT AS sales
-    FROM "Transaction"
-    WHERE "createdAt" >= ${thirtyDaysAgo}
+      SUM(amount)::FLOAT AS sales
+    FROM (
+      SELECT "createdAt", "totalAmount" AS amount FROM "Transaction" WHERE "createdAt" >= ${thirtyDaysAgo}
+      UNION ALL
+      SELECT "createdAt", -"totalAmount" AS amount FROM "SaleVoid" WHERE "createdAt" >= ${thirtyDaysAgo}
+    ) e
     GROUP BY DATE("createdAt"), TO_CHAR("createdAt", 'Mon DD')
     ORDER BY DATE("createdAt") ASC;
   `;

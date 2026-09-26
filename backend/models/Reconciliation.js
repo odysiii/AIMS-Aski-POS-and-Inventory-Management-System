@@ -47,7 +47,9 @@ const summarizeToday = async (cashierId, client = prisma) => {
   const { start, end, dateKey } = getToday();
   const createdAt = { gte: start, lte: end };
 
-  const [overall, cash] = await Promise.all([
+  // Voids count on the day they happen, in the shift of whoever did them: a cash void was paid
+  // back out of this drawer, so it comes off the cash the drawer should hold.
+  const [overall, cash, voids, cashVoids] = await Promise.all([
     client.transaction.aggregate({
       _sum: { subtotal: true, discountAmount: true, totalAmount: true },
       where: { cashierId, createdAt },
@@ -56,14 +58,26 @@ const summarizeToday = async (cashierId, client = prisma) => {
       _sum: { totalAmount: true },
       where: { cashierId, paymentMethod: 'CASH', createdAt },
     }),
+    client.saleVoid.aggregate({
+      _sum: { totalAmount: true },
+      _count: true,
+      where: { voidedById: cashierId, createdAt },
+    }),
+    client.saleVoid.aggregate({
+      _sum: { totalAmount: true },
+      where: { voidedById: cashierId, paymentMethod: 'CASH', createdAt },
+    }),
   ]);
+  const voidCents = toCents(voids._sum.totalAmount);
 
   return {
     dateKey,
     grossSalesCents: toCents(overall._sum.subtotal),
     totalDiscountCents: toCents(overall._sum.discountAmount),
-    netSalesCents: toCents(overall._sum.totalAmount),
-    posCashCents: toCents(cash._sum.totalAmount),
+    voidCount: voids._count,
+    voidAmountCents: voidCents,
+    netSalesCents: toCents(overall._sum.totalAmount) - voidCents,
+    posCashCents: toCents(cash._sum.totalAmount) - toCents(cashVoids._sum.totalAmount),
   };
 };
 
@@ -92,6 +106,8 @@ const ReconciliationModel = {
       expectedCash: centsToNumber(summary.posCashCents),
       grossSales: centsToNumber(summary.grossSalesCents),
       totalDiscount: centsToNumber(summary.totalDiscountCents),
+      voidCount: summary.voidCount,
+      voidAmount: centsToNumber(summary.voidAmountCents),
       netSales: centsToNumber(summary.netSalesCents),
       posCash: centsToNumber(summary.posCashCents),
       pointsAvailed: 0,
@@ -154,6 +170,8 @@ const ReconciliationModel = {
           grossSales: centsToNumber(summary.grossSalesCents),
           pointsAvailed: 0,
           totalDiscount: centsToNumber(summary.totalDiscountCents),
+          voidCount: summary.voidCount,
+          voidAmount: centsToNumber(summary.voidAmountCents),
           netSales: centsToNumber(summary.netSalesCents),
           cashDiscount: 0,
 

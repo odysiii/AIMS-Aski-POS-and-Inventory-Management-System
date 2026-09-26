@@ -42,6 +42,19 @@ class FinanceModel {
       }
     });
 
+    // Voided sales come off net revenue on the day of the void (the sale itself still counts on
+    // the day it was rung up), the same way the X-/Z-Readings and the sales report count them.
+    const voids = await prisma.saleVoid.findMany({ select: { totalAmount: true, createdAt: true } });
+    let totalVoids = 0;
+    voids.forEach((v) => {
+      const amount = parseFloat(v.totalAmount || 0);
+      totalVoids += amount;
+      totalNet -= amount;
+      const dayName = new Date(v.createdAt).toLocaleDateString('en-US', { weekday: 'short' });
+      const target = revenueComparisonData.find((d) => d.day === dayName);
+      if (target) target.net -= amount;
+    });
+
     // 2. Fetch shift reconciliations for drawer variance audit
     const reconciliations = await prisma.reconciliation.findMany({
       take: 10,
@@ -71,6 +84,7 @@ class FinanceModel {
         totalGross: Math.round(totalGross),
         totalNet: Math.round(totalNet),
         totalDiscounts: Math.round(totalDiscounts),
+        totalVoids: Math.round(totalVoids),
         totalVariance: Math.round(totalVariance),
         netRetentionRate: totalGross > 0 ? ((totalNet / totalGross) * 100).toFixed(1) : '100.0',
       },

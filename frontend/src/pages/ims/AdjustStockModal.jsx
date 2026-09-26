@@ -4,7 +4,7 @@ import { X, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { apiFetch } from '../../auth/apiFetch';
 
 const API_BASE_URL = 'http://localhost:5000/api';
-const FALLBACK_REASONS = ['Damaged', 'Expired', 'Lost / Theft', 'Count correction', 'Other'];
+const FALLBACK_REASONS = ['Damaged', 'Expired', 'Lost/Theft', 'Pull Out', 'Bad Order', 'Printing Forms', 'Retail', 'For Adjustment'];
 
 const fieldClass =
   'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all';
@@ -46,11 +46,6 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
       setError('The counted quantity matches the current stock — nothing to adjust.');
       return;
     }
-    if (reason === 'Other' && !notes.trim()) {
-      setError('Please describe the reason.');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/products/${product.id}/adjust-stock`, {
@@ -113,7 +108,7 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
           )}
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Reason</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Remarks</label>
             <select value={reason} onChange={(e) => setReason(e.target.value)} className={fieldClass}>
               {reasons.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -123,7 +118,7 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
 
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Notes {reason === 'Other' ? '(required)' : '(optional)'}
+              Notes (optional)
             </label>
             <input type="text" maxLength={255} value={notes} onChange={(e) => setNotes(e.target.value)} className={fieldClass} placeholder="e.g., Water damage on shelf 3" />
           </div>

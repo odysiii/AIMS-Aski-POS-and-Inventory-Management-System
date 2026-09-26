@@ -1,11 +1,12 @@
-// Silent thermal receipt printing: talks straight to the printer over the
-// network (raw ESC/POS on port 9100, the "JetDirect" protocol nearly every
-// receipt printer supports) so nothing ever opens a browser print dialog.
-// Configure via RECEIPT_PRINTER_INTERFACE in backend/.env — see .env.example.
+// Silent thermal receipt printing: raw ESC/POS straight to the printer, either over the network
+// (tcp://, port 9100) or through a shared Windows print queue (printer:<share>, see
+// winRawPrintDriver.js), so nothing ever opens a browser print dialog.
+// Configure via RECEIPT_PRINTER_INTERFACE in backend/.env — see .env.example and print.md.
 
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const { STORE_INFO } = require('../config/storeInfo');
 const winRawPrintDriver = require('./winRawPrintDriver');
+const { WIDTH, toCols, money, fmtDateTime, renderToPrinter, buildSaleReceipt, buildVoidReceipt } = require('./receiptLayout');
 
 const INTERFACE = process.env.RECEIPT_PRINTER_INTERFACE;
 const PRINTER_TYPE = (process.env.RECEIPT_PRINTER_TYPE || 'epson').toLowerCase();
@@ -22,14 +23,14 @@ function isConfigured() {
   return Boolean(INTERFACE);
 }
 
-function money(value) {
-  return `P${(Number(value) || 0).toFixed(2)}`;
-}
+// Whole-character columns (see toCols in receiptLayout.js) so rows are exactly one printer line.
+const table = (printer, cells) => printer.tableCustom(toCols(cells));
 
 function buildPrinter() {
   return new ThermalPrinter({
     type: TYPE_MAP[PRINTER_TYPE] || PrinterTypes.EPSON,
     interface: INTERFACE,
+    width: WIDTH,
     // Only used by the `printer:<share-name>` interface mode (see winRawPrintDriver.js);
     // ignored by the `tcp://` network mode.
     driver: winRawPrintDriver,
@@ -38,15 +39,9 @@ function buildPrinter() {
   });
 }
 
-// Matches the BIR-style sales-invoice template on file (a real ASKI Multi-Purpose Cooperative
-// receipt): store header, blank customer fields (POS captures no customer info today), one row
-// per line item (barcode + name + amount, then an indented qty @ unit-price row), totals, cashier
-// and terminal, then the VATable/VAT-Exempt/Zero-Rated breakdown. The store's TIN is registered
-// NON VAT, so every sale is booked as VAT-Exempt and VAT is always 0 — see storeInfo.js if that
-// ever needs to become per-product. "SI No" and "Tan No" both reuse AIMS's own transaction
-// number/id rather than a separate BIR-sequential OR number, same convention as the Z-Reading's
-// beginning/ending transaction numbers.
-async function printReceipt(data = {}) {
+// Sends a layout built by receiptLayout.js to the printer. Never throws: the result says whether
+// it printed, so callers can report it or ignore it.
+async function printLines(lines, label) {
   if (!isConfigured()) {
     console.log('[receipt-printer] RECEIPT_PRINTER_INTERFACE not set in backend/.env — skipping silent print.');
     return { printed: false, reason: 'not_configured' };
@@ -60,147 +55,46 @@ async function printReceipt(data = {}) {
     return { printed: false, reason: 'unreachable' };
   }
 
-  const items = Array.isArray(data.items) ? data.items : [];
-  const totalAmount = Number(data.totalAmount) || 0;
-  const amountPaid = Number(data.amountPaid ?? totalAmount) || 0;
-  const change = Math.max(0, amountPaid - totalAmount);
-  const now = new Date();
-  const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  const txnRef = data.transactionId ?? 'N/A';
-
-  printer.alignCenter();
-  printer.bold(true);
-  printer.println(STORE_INFO.name);
-  printer.bold(false);
-  printer.println(STORE_INFO.addressLine1 + (STORE_INFO.addressLine2 ? `, ${STORE_INFO.addressLine2}` : ''));
-  printer.println(`TIN ${STORE_INFO.tin}`);
-  printer.newLine();
-
-  printer.alignLeft();
-  printer.println(`SI No: ${txnRef}`);
-  printer.println(`Date-Time: ${now.toLocaleString()}`);
-  printer.newLine();
-  printer.println('Name:');
-  printer.println('Address:');
-  printer.println('TIN:');
-  printer.drawLine();
-
-  items.forEach((item) => {
-    const quantity = Number(item.quantity) || 0;
-    const unitPrice = Number(item.unitPrice ?? item.price ?? 0) || 0;
-    printer.tableCustom([
-      { text: String(item.barcode || ''), align: 'LEFT', width: 0.3 },
-      { text: String(item.name || 'Item').slice(0, 20), align: 'LEFT', width: 0.4 },
-      { text: money(quantity * unitPrice), align: 'RIGHT', width: 0.3 },
-    ]);
-    printer.println(`   ${quantity} @ ${money(unitPrice)}`);
-  });
-
-  printer.drawLine();
-  printer.println(`No. of Items: ${itemCount}`);
-  printer.newLine();
-
-  const discountAmount = Number(data.discountAmount) || 0;
-  if (discountAmount > 0) {
-    printer.tableCustom([
-      { text: 'SUBTOTAL', align: 'LEFT', width: 0.6 },
-      { text: money(data.subtotal ?? totalAmount + discountAmount), align: 'RIGHT', width: 0.4 },
-    ]);
-    printer.tableCustom([
-      { text: 'DISCOUNT', align: 'LEFT', width: 0.6 },
-      { text: money(discountAmount), align: 'RIGHT', width: 0.4 },
-    ]);
-  }
-  printer.bold(true);
-  printer.tableCustom([
-    { text: 'TOTAL', align: 'LEFT', width: 0.6 },
-    { text: money(totalAmount), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.bold(false);
-
-  if (String(data.paymentMethod || '').toUpperCase() === 'CASH') {
-    printer.tableCustom([
-      { text: 'CASH', align: 'LEFT', width: 0.6 },
-      { text: money(amountPaid), align: 'RIGHT', width: 0.4 },
-    ]);
-    printer.tableCustom([
-      { text: 'CHANGE', align: 'LEFT', width: 0.6 },
-      { text: money(change), align: 'RIGHT', width: 0.4 },
-    ]);
-  }
-
-  printer.drawLine();
-  printer.println(`Cashier ${data.cashier ?? 'N/A'}`);
-  printer.println(`Terminal No: ${STORE_INFO.terminalNo}`);
-  printer.newLine();
-  printer.println(`Tan No ${txnRef}`);
-  printer.println(`Date: ${now.toLocaleDateString()}`);
-  printer.drawLine();
-
-  // Store is registered NON VAT (see storeInfo.js) — every sale is booked as VAT-Exempt.
-  printer.tableCustom([
-    { text: 'VATable Sale (T)', align: 'LEFT', width: 0.6 },
-    { text: money(0), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.tableCustom([
-    { text: 'VAT-Exempt Sale (X)', align: 'LEFT', width: 0.6 },
-    { text: money(totalAmount), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.tableCustom([
-    { text: 'VAT Zero Rated Sale (Z)', align: 'LEFT', width: 0.6 },
-    { text: money(0), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.tableCustom([
-    { text: 'Total Sale', align: 'LEFT', width: 0.6 },
-    { text: money(totalAmount), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.tableCustom([
-    { text: 'VAT', align: 'LEFT', width: 0.6 },
-    { text: money(0), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.bold(true);
-  printer.tableCustom([
-    { text: 'Total', align: 'LEFT', width: 0.6 },
-    { text: money(totalAmount), align: 'RIGHT', width: 0.4 },
-  ]);
-  printer.bold(false);
-  printer.newLine();
-
-  printer.alignCenter();
-  printer.bold(true);
-  printer.println('THANK YOU!!!');
-  printer.println('THIS SERVES AS AN OFFICIAL RECEIPT');
-  printer.bold(false);
-  printer.newLine();
-
-  printer.println(STORE_INFO.posProviderName);
-  printer.println(STORE_INFO.posProviderAddress);
-  printer.println(`VAT-REG-TIN ${STORE_INFO.posProviderVatTin}`);
-  printer.println(`ACCR # ${STORE_INFO.posProviderAccr}`);
-  printer.println(`PTU DATE ${STORE_INFO.ptuDate}`);
-  printer.println(`PTU Valid Until ${STORE_INFO.ptuValidUntil}`);
-  printer.println(`PTUM: ${STORE_INFO.ptum}`);
-  printer.newLine();
-  printer.println('THIS INVOICE SHALL BE VALID FOR FIVE (5) YEARS');
-  printer.println('FROM THE DATE OF THE PERMIT TO USE');
-  printer.newLine();
+  renderToPrinter(printer, lines);
   printer.cut();
 
   try {
     await printer.execute();
-    console.log(`[receipt-printer] Printed receipt for txn ${txnRef}.`);
+    console.log(`[receipt-printer] Printed ${label}.`);
     return { printed: true };
   } catch (err) {
-    console.error('[receipt-printer] Print failed:', err.message);
+    console.error(`[receipt-printer] Print of ${label} failed:`, err.message);
     return { printed: false, reason: 'error', error: err.message };
   }
 }
+
+// A sale receipt — the BIR-style sales invoice laid out in receiptLayout.js (buildSaleReceipt).
+// `data.transactionNo` (or the older `transactionId`) is the printed transaction number; with
+// `reprint`, the copy is marked "*** REPRINT ***" and stamped with the reprint time.
+async function printReceipt(data = {}, { reprint = false } = {}) {
+  const sale = { ...data, transactionNo: data.transactionNo ?? data.transactionId };
+  const lines = buildSaleReceipt(sale, { reprintedAt: reprint ? new Date() : null });
+  return printLines(lines, `receipt for txn ${sale.transactionNo ?? 'N/A'}${reprint ? ' (reprint)' : ''}`);
+}
+
+// A void slip (receiptLayout.buildVoidReceipt); `data` is SaleVoidModel.findReceiptData's shape.
+async function printVoidReceipt(data = {}, { reprint = false } = {}) {
+  const lines = buildVoidReceipt(data, { reprintedAt: reprint ? new Date() : null });
+  return printLines(lines, `void ${data.voidNo ?? 'N/A'}${reprint ? ' (reprint)' : ''}`);
+}
+
+// "VOID (2)  -P120.00" — a reading's voids, already taken out of its NET.
+const voidRow = (count, amount) => [
+  { text: `VOID (${Number(count) || 0})`, align: 'LEFT', width: 0.6 },
+  { text: `-${money(amount)}`, align: 'RIGHT', width: 0.4 },
+];
 
 const PAYMENT_LABELS = { CASH: 'CASH', CARD: 'CARD', E_wallet: 'E-WALLET' };
 
 // Prints a cashier's Z-Reading — the supervisor-gated closing report built by
 // models/ZReading.js. `report` is a ZReadingLog row (with its cashier/approvedBy relations).
-async function printZReading(report = {}) {
+// With `reprint`, the copy is marked "*** REPRINT ***" and stamped with the reprint time.
+async function printZReading(report = {}, { reprint = false } = {}) {
   if (!isConfigured()) {
     console.log('[receipt-printer] RECEIPT_PRINTER_INTERFACE not set in backend/.env — skipping silent print.');
     return { printed: false, reason: 'not_configured' };
@@ -236,25 +130,27 @@ async function printZReading(report = {}) {
   printer.alignCenter();
   printer.bold(true);
   printer.println('Z-READING REPORT');
+  if (reprint) printer.println('*** REPRINT ***');
   printer.bold(false);
   printer.newLine();
 
   printer.alignLeft();
-  printer.tableCustom([
+  table(printer, [
     { text: 'GROSS', align: 'LEFT', width: 0.6 },
     { text: money(report.grossSales), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'POINTS AVAILED', align: 'LEFT', width: 0.6 },
     { text: money(report.pointsAvailed), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'TOTAL DISCOUNT', align: 'LEFT', width: 0.6 },
     { text: money(report.totalDiscount), align: 'RIGHT', width: 0.4 },
   ]);
+  table(printer, voidRow(report.voidCount, report.voidAmount));
   printer.newLine();
   printer.bold(true);
-  printer.tableCustom([
+  table(printer, [
     { text: 'NET', align: 'LEFT', width: 0.6 },
     { text: money(report.netSales), align: 'RIGHT', width: 0.4 },
   ]);
@@ -262,7 +158,7 @@ async function printZReading(report = {}) {
   printer.newLine();
 
   payments.forEach((p) => {
-    printer.tableCustom([
+    table(printer, [
       { text: String(p.count), align: 'LEFT', width: 0.2 },
       { text: PAYMENT_LABELS[p.method] || p.method, align: 'LEFT', width: 0.4 },
       { text: money(p.amount), align: 'RIGHT', width: 0.4 },
@@ -276,9 +172,9 @@ async function printZReading(report = {}) {
   printer.bold(false);
   printer.alignLeft();
   categories.forEach((c) => {
-    printer.tableCustom([
+    table(printer, [
       { text: String(c.quantity), align: 'LEFT', width: 0.15 },
-      { text: String(c.category).slice(0, 25), align: 'LEFT', width: 0.45 },
+      { text: String(c.category).slice(0, 20), align: 'LEFT', width: 0.45 },
       { text: money(c.amount), align: 'RIGHT', width: 0.4 },
     ]);
   });
@@ -294,12 +190,13 @@ async function printZReading(report = {}) {
   printer.bold(true);
   printer.println('***END OF REPORT***');
   printer.bold(false);
+  if (reprint) printer.println(`Reprinted: ${fmtDateTime(new Date())}`);
   printer.newLine();
   printer.cut();
 
   try {
     await printer.execute();
-    console.log(`[receipt-printer] Printed Z-Reading ${report.reportNo ?? 'N/A'}.`);
+    console.log(`[receipt-printer] Printed Z-Reading ${report.reportNo ?? 'N/A'}${reprint ? ' (reprint)' : ''}.`);
     return { printed: true };
   } catch (err) {
     console.error('[receipt-printer] Z-Reading print failed:', err.message);
@@ -362,29 +259,30 @@ async function printXReading(record = {}) {
   printer.println(`Cashier : ${record.cashier?.username || 'N/A'}`);
   printer.drawLine();
 
-  printer.tableCustom([
+  table(printer, [
     { text: 'GROSS', align: 'LEFT', width: 0.6 },
     { text: money(record.grossSales), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'POINTS AVAILED', align: 'LEFT', width: 0.6 },
     { text: money(record.pointsAvailed), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'TOTAL DISCOUNT', align: 'LEFT', width: 0.6 },
     { text: money(record.totalDiscount), align: 'RIGHT', width: 0.4 },
   ]);
+  table(printer, voidRow(record.voidCount, record.voidAmount));
   printer.drawLine();
 
   printer.bold(true);
-  printer.tableCustom([
+  table(printer, [
     { text: 'NET', align: 'LEFT', width: 0.6 },
     { text: money(record.netSales), align: 'RIGHT', width: 0.4 },
   ]);
   printer.bold(false);
   printer.drawLine();
 
-  printer.tableCustom([
+  table(printer, [
     { text: 'CASH', align: 'LEFT', width: 0.6 },
     { text: money(record.posCash ?? record.netSales), align: 'RIGHT', width: 0.4 },
   ]);
@@ -399,7 +297,7 @@ async function printXReading(record = {}) {
   printer.alignLeft();
   DENOMINATION_ROWS.forEach(({ key, value, label }) => {
     const count = parseInt(record[key], 10) || 0;
-    printer.tableCustom([
+    table(printer, [
       { text: String(count), align: 'LEFT', width: 0.2 },
       { text: label, align: 'CENTER', width: 0.4 },
       { text: money(count * value), align: 'RIGHT', width: 0.4 },
@@ -407,27 +305,27 @@ async function printXReading(record = {}) {
   });
   printer.drawLine();
 
-  printer.tableCustom([
+  table(printer, [
     { text: 'TOTAL CASH', align: 'LEFT', width: 0.6 },
     { text: money(record.cashierCash), align: 'RIGHT', width: 0.4 },
   ]);
   printer.drawLine();
 
-  printer.tableCustom([
+  table(printer, [
     { text: 'POS CASH', align: 'LEFT', width: 0.6 },
     { text: money(record.posCash), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'CASH DISC :', align: 'LEFT', width: 0.6 },
     { text: money(record.cashDiscount), align: 'RIGHT', width: 0.4 },
   ]);
-  printer.tableCustom([
+  table(printer, [
     { text: 'CASHIER CASH', align: 'LEFT', width: 0.6 },
     { text: money(record.cashierCash), align: 'RIGHT', width: 0.4 },
   ]);
   printer.bold(true);
   const shortOverTag = shortOver < 0 ? ' (SHORTAGE)' : shortOver > 0 ? ' (OVERAGE)' : '';
-  printer.tableCustom([
+  table(printer, [
     { text: 'SHORT/OVER', align: 'LEFT', width: 0.6 },
     { text: money(shortOver) + shortOverTag, align: 'RIGHT', width: 0.4 },
   ]);
@@ -451,4 +349,4 @@ async function printXReading(record = {}) {
   }
 }
 
-module.exports = { isConfigured, printReceipt, printXReading, printZReading };
+module.exports = { isConfigured, printReceipt, printVoidReceipt, printXReading, printZReading };

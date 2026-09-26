@@ -25,6 +25,7 @@ import ReceivingReportModal from './ReceivingReportModal';
 import PurchaseReturnModal from './PurchaseReturnModal';
 import StockHistoryModal from './StockHistoryModal';
 import AdjustStockModal from './AdjustStockModal';
+import ReceiptPreviewModal, { LedgerReference } from './ReceiptPreviewModal';
 
 import { apiFetch, getAuthToken } from '../../auth/apiFetch';
 import { useAuth } from '../../auth/AuthContext';
@@ -1308,6 +1309,7 @@ const LEDGER_TYPE_LABELS = {
   SALE: 'Sale',
   PURCHASE_RETURN: 'Pull-out (return)',
   ADJUSTMENT: 'Adjustment',
+  VOID: 'Void (returned)',
 };
 const ledgerPeso = (n) => `₱${Number(n).toFixed(2)}`;
 
@@ -1325,6 +1327,7 @@ function LedgerReportPage({ exportToExcel }) {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [receiptTarget, setReceiptTarget] = useState(null); // { kind: 'sale' | 'void', id }
 
   const applyPage = (rows, before) => {
     setMovements((prev) => (before ? [...prev, ...rows] : rows));
@@ -1526,7 +1529,7 @@ function LedgerReportPage({ exportToExcel }) {
                     {m.amount != null ? ledgerPeso(m.amount) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
-                    {m.referenceNo && <span className="font-mono text-slate-700">{m.referenceNo}</span>}
+                    <LedgerReference movement={m} onOpen={setReceiptTarget} />
                     {m.poNumber && <span className="text-slate-400"> ({m.poNumber})</span>}
                     {m.referenceNo && m.reason ? ' — ' : ''}
                     {m.reason}
@@ -1555,6 +1558,7 @@ function LedgerReportPage({ exportToExcel }) {
           </div>
         )}
       </div>
+      {receiptTarget && <ReceiptPreviewModal kind={receiptTarget.kind} id={receiptTarget.id} onClose={() => setReceiptTarget(null)} />}
     </div>
   );
 }
@@ -1742,11 +1746,18 @@ function MembersPage() {
                   {history.map((h) => (
                     <tr key={h.id}>
                       <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(h.createdAt).toLocaleString()}</td>
-                      <td className="px-4 py-3 font-mono text-slate-700">{h.transaction?.transactionNo || '—'}</td>
+                      <td className="px-4 py-3 font-mono text-slate-700">
+                        {h.transaction?.transactionNo || '—'}
+                        {h.type === 'VOID' && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-sans font-bold">VOIDED</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right text-slate-700 font-semibold whitespace-nowrap">
                         {h.transaction ? ledgerPeso(h.transaction.totalAmount) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-center font-black text-emerald-600">+{Number(h.points).toFixed(2)}</td>
+                      <td className={`px-4 py-3 text-center font-black ${Number(h.points) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {Number(h.points) < 0 ? '' : '+'}{Number(h.points).toFixed(2)}
+                      </td>
                       <td className="px-4 py-3 text-center font-bold text-slate-900">{Number(h.balanceAfter).toFixed(2)}</td>
                     </tr>
                   ))}
@@ -1816,6 +1827,7 @@ function ReconciliationPage({ exportToExcel }) {
         'Manual Add': r.manualAdd,
         'Returned': r.returned,
         'Sold': r.sold,
+        'Voided (returned)': r.voided,
         'Adjustment': r.adjustment,
         'Expected Closing': r.expectedClosing,
         'Actual Closing': r.actualClosing,
@@ -1830,8 +1842,11 @@ function ReconciliationPage({ exportToExcel }) {
           'POS Discounts (₱)': report.sales.posDiscounts.toFixed(2),
           'POS Net Sales (₱)': report.sales.posNetSales.toFixed(2),
           'Ledger Sale Revenue (₱)': report.sales.ledgerSaleRevenue.toFixed(2),
+          'Voids': report.sales.voidCount,
+          'Voided Amount (₱)': report.sales.voidAmount.toFixed(2),
           'Mismatch': report.sales.mismatch ? 'YES' : '',
           'Transactions Without Movements': report.sales.transactionsWithoutMovements.length,
+          'Voids Without Movements': report.sales.voidsWithoutMovements.length,
         },
       ];
       await exportToExcel(null, `Reconciliation_${report.from}_to_${report.to}`, [
@@ -1926,12 +1941,23 @@ function ReconciliationPage({ exportToExcel }) {
                 </div>
               </div>
             </div>
+            {report.sales.voidCount > 0 && (
+              <p className="mt-3 text-[11px] text-slate-500 font-semibold">
+                {report.sales.voidCount} void(s) in this range, ₱{report.sales.voidAmount.toFixed(2)} (the voided sales stay in the figures above; the stock came back through VOID rows).
+              </p>
+            )}
             {report.sales.transactionsWithoutMovements.length > 0 && (
               <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
                 <p className="font-bold mb-1">{report.sales.transactionsWithoutMovements.length} transaction(s) have no matching stock movements:</p>
                 <p className="font-mono">
                   {report.sales.transactionsWithoutMovements.map((t) => t.transactionNo).join(', ')}
                 </p>
+              </div>
+            )}
+            {report.sales.voidsWithoutMovements.length > 0 && (
+              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                <p className="font-bold mb-1">{report.sales.voidsWithoutMovements.length} void(s) didn't return their stock:</p>
+                <p className="font-mono">{report.sales.voidsWithoutMovements.map((v) => v.voidNo).join(', ')}</p>
               </div>
             )}
           </div>
@@ -1965,6 +1991,7 @@ function ReconciliationPage({ exportToExcel }) {
                     <th className="px-4 py-3 text-center">Received</th>
                     <th className="px-4 py-3 text-center">Returned</th>
                     <th className="px-4 py-3 text-center">Sold</th>
+                    <th className="px-4 py-3 text-center">Voided</th>
                     <th className="px-4 py-3 text-center">Adjusted</th>
                     <th className="px-4 py-3 text-center">Expected</th>
                     <th className="px-4 py-3 text-center">Actual</th>
@@ -1974,7 +2001,7 @@ function ReconciliationPage({ exportToExcel }) {
                 <tbody className="divide-y divide-slate-100">
                   {visibleRows.length === 0 && (
                     <tr>
-                      <td colSpan="9" className="px-4 py-10 text-center text-slate-400">
+                      <td colSpan="10" className="px-4 py-10 text-center text-slate-400">
                         <div className="flex flex-col items-center gap-2">
                           {report.stock.mismatchCount === 0 ? (
                             <>
@@ -2001,6 +2028,7 @@ function ReconciliationPage({ exportToExcel }) {
                       <td className="px-4 py-3 text-center text-emerald-600 font-semibold">{r.received + r.manualAdd > 0 ? `+${r.received + r.manualAdd}` : 0}</td>
                       <td className="px-4 py-3 text-center text-rose-600 font-semibold">{r.returned > 0 ? `-${r.returned}` : 0}</td>
                       <td className="px-4 py-3 text-center text-rose-600 font-semibold">{r.sold > 0 ? `-${r.sold}` : 0}</td>
+                      <td className={`px-4 py-3 text-center font-semibold ${r.voided > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{r.voided > 0 ? `+${r.voided}` : 0}</td>
                       <td className={`px-4 py-3 text-center font-semibold ${r.adjustment > 0 ? 'text-emerald-600' : r.adjustment < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                         {r.adjustment > 0 ? `+${r.adjustment}` : r.adjustment}
                       </td>

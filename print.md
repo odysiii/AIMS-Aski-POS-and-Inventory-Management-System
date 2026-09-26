@@ -63,13 +63,22 @@ extra software beyond Epson's printer driver, no native npm packages).
    Printers & scanners, or the classic "Devices and Printers" panel).
 3. Open that printer's Properties → **Sharing** tab → check **Share this printer**. Give it a
    share name with **no spaces**, e.g. `EPSON_TMT82X` (spaces in the name complicate the raw copy
-   command later — keep it simple).
-4. Sanity-check the share works before touching the app: from a terminal on this same machine,
+   command later — keep it simple). If the tab says sharing is off, first enable **File and printer
+   sharing** (Settings → Network & internet → Advanced network settings → Advanced sharing
+   settings). PowerShell alternative, run as Administrator:
+   ```powershell
+   Get-Printer | Select-Object Name, Shared, ShareName   # find the TM-T82X's exact name
+   Set-Printer -Name "<that name>" -Shared $true -ShareName "EPSON_TMT82X"
    ```
-   dir \\localhost\EPSON_TMT82X
+4. Sanity-check the share before touching the app, from a Command Prompt on this same machine:
    ```
-   should succeed without a "network name cannot be found" error. If it fails, the share isn't
-   set up correctly yet — fix that first.
+   net view \\localhost
+   echo AIMS TEST > %TEMP%\t.txt
+   copy /b %TEMP%\t.txt \\localhost\EPSON_TMT82X
+   ```
+   `EPSON_TMT82X` should be listed with type **Print**, and "AIMS TEST" should come out on paper —
+   that's exactly how the app sends its receipts. ("The network name cannot be found" means the
+   share name is wrong or sharing isn't on yet.)
 5. In `backend/.env`, set:
    ```
    RECEIPT_PRINTER_INTERFACE=printer:EPSON_TMT82X
