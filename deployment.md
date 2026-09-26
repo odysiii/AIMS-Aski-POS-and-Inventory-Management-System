@@ -16,6 +16,82 @@ real system, and reported back — nothing here is implemented yet.
 
 ---
 
+## Deployment target and revised plan (decided 2026-09-25)
+
+The audit below was written before the target environment was known. These decisions override its
+order and add one phase. The findings themselves are still valid.
+
+### Constraints and decisions
+
+- **Cashier PC is Windows 7 with low specs.** It cannot run modern Node, Postgres or Python, so it
+  runs **only a browser** (a thin client) and the USB TM-T82X thermal printer is plugged into it.
+- **A separate server PC exists** (assumed Windows 10/11; to be confirmed). It runs Postgres, the
+  backend, the AI service and the built frontend on the store LAN.
+- **Store LAN only for selling; no upgrade of the cashier PC.** Selling must never depend on the
+  internet.
+- **Remote owner/admin access** through a secure tunnel running on the server (Cloudflare Tunnel
+  with Cloudflare Access, or Tailscale). No router ports opened. A cloud copy of the database is
+  deliberately not planned: it would need two-way sync. Revisit only if remote access is needed
+  while the store PC is off.
+- **Packaging:** plain Windows install with auto-start services (pm2 or NSSM), not Docker.
+- **Data:** keep the current database (real products, stock and imported sales).
+
+### Architecture
+
+    Win7 cashier PC (browser only) --LAN--> Server PC (backend + Postgres + AI service + frontend)
+              |                                        ^
+        TM-T82X (USB, shared)  <-- copy /b \\CASHIER-PC\share --+
+                                                       |
+                                  Owner (remote) --tunnel--+
+
+Printing from the server to a printer on another PC reuses `winRawPrintDriver.js`, which today
+sends to `\\localhost\<share>`. It needs to accept a host name, e.g.
+`RECEIPT_PRINTER_INTERFACE=printer:\\CASHIER-PC\TM-T82X`. No software is needed on the Win7 PC
+beyond the Epson driver and printer sharing. Downsides accepted: receipts do not print while the
+cashier PC is off, and Windows 7 no longer receives security updates (mitigated by keeping it on
+the LAN with no general browsing).
+
+### Risks to test first (before writing deployment code)
+
+1. **Browser on Windows 7.** The last Chrome for Windows 7 is 109; Tailwind v4 expects Chrome 111+
+   (`@property`, `color-mix`), so the POS may render broken. Build the frontend and open it on that
+   PC. Fallbacks: Firefox ESR 115, or Supermium (a Chromium build that still supports Windows 7).
+   Also check the Vite build target and any modern JS features the app relies on.
+2. **Epson driver on Windows 7.** Confirm the TM-T82X driver installs and the printer can be
+   shared and reached from the server (`net view`, then a `copy /b` test, as in print.md).
+
+### Phase order (revised)
+
+1. **Windows 7 terminal** (new, first because it decides whether this design works): browser
+   compatibility test and fixes; kiosk-style shortcut that opens the POS at boot; printer sharing
+   setup; remote-share support in `winRawPrintDriver.js`; a section in print.md.
+2. **Phase 0, data safety:** migration baseline, nightly `pg_dump` (14 days kept, copied
+   off-machine) with a tested restore, seeder and one-off script lockdown, first-admin script,
+   replace demo passwords and supervisor PIN 1234.
+3. **Phase 1, config:** `VITE_API_BASE_URL`, `FRONTEND_URL` for CORS, backend serves the built
+   frontend, startup env validation, AI service bound to 127.0.0.1, fixed LAN IP or name for the
+   server.
+4. **Phase 2, security:** helmet, IP rate limiting, remove the login-page credential hint, audit
+   fixes, Windows Firewall rule limiting access to the store LAN, tunnel access login.
+5. **Phase 3, reliability:** `/api/health`, boot DB check, crash handlers, file logs with
+   rotation, auto-start services with restart on crash, AI service without `--reload`.
+6. **Phase 4, install and CI:** install runbook and script, update procedure (backup, pull,
+   `migrate deploy`, build, restart), GitHub Actions, auth and checkout tests.
+7. **Phase 5, go-live rehearsal:** clean-machine install with a copy of the real database; print a
+   receipt, X-Reading, Z-Reading and void slip on the TM-T82X across the LAN; unplug the network
+   to confirm the counter behaviour; rollback plan and cutover day.
+
+### Open items (user is gathering information)
+
+- Is the server PC Windows 10/11 or Linux? (The remote-print method needs Windows.)
+- Which browser and version is on the Win7 PC; can it run Chrome 109 or Firefox ESR 115?
+- Off-machine backup location: external drive, cloud folder, or both?
+- Remote access tool: Cloudflare Tunnel (needs a domain, about $10 a year) or Tailscale?
+
+Note: everything below still applies, but read the Phase 0-4 sections in the order above.
+
+---
+
 ## Severity key
 
 - **Blocker** — deploying without fixing this will break the app, expose it to unauthenticated
