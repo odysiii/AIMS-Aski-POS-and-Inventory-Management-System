@@ -320,6 +320,18 @@ function InventoryPage({ products, setProducts, loadFullProducts, stockUpdateEve
   const [isAddStockOpen, setIsAddStockOpen] = useState(false);
   const [historyProduct, setHistoryProduct] = useState(null);
   const [adjustProduct, setAdjustProduct] = useState(null);
+  // Caches the supervisor approval from the FIRST stock adjustment so the PIN isn't asked again
+  // for later adjustments (even on other products) until it expires — see AdjustStockModal. A
+  // timer clears it on expiry so AdjustStockModal only ever needs to check for its presence,
+  // never the clock, during render.
+  const [adjustStockApproval, setAdjustStockApproval] = useState(null);
+  const handleAdjustStockApproved = useCallback((newApproval) => {
+    setAdjustStockApproval(newApproval);
+    if (newApproval) {
+      const ms = Math.max(newApproval.expiresAt - Date.now(), 0);
+      setTimeout(() => setAdjustStockApproval((current) => (current === newApproval ? null : current)), ms);
+    }
+  }, []);
   const [isPurchaseOrderOpen, setIsPurchaseOrderOpen] = useState(false);
   const [isReceivingReportOpen, setIsReceivingReportOpen] = useState(false);
   const [isPurchaseReturnOpen, setIsPurchaseReturnOpen] = useState(false);
@@ -1066,6 +1078,8 @@ function InventoryPage({ products, setProducts, loadFullProducts, stockUpdateEve
         <AdjustStockModal
           key={adjustProduct.id}
           product={adjustProduct}
+          approval={adjustStockApproval}
+          onApproved={handleAdjustStockApproved}
           onClose={() => setAdjustProduct(null)}
           onAdjusted={(updated) => {
             setPageProducts((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));

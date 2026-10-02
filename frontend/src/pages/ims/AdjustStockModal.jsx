@@ -12,7 +12,13 @@ const fieldClass =
 
 // Mount this only while a product is selected. Corrections are entered as the physically counted
 // quantity; the server works out the difference against live stock and logs it.
-export default function AdjustStockModal({ product, onClose, onAdjusted }) {
+//
+// `approval` is the supervisor approval cached by the parent from a previous adjustment (if still
+// valid) — passing it in (instead of each modal asking for a fresh PIN every time) means only the
+// FIRST adjustment in a batch prompts for the PIN; every later one, even on a different product,
+// reuses it silently until it expires. `onApproved` lets this modal hand a freshly-obtained
+// approval back up to the parent so later adjustments can reuse it too.
+export default function AdjustStockModal({ product, onClose, onAdjusted, approval, onApproved }) {
   const [counted, setCounted] = useState(String(product.stock));
   const [reasons, setReasons] = useState(FALLBACK_REASONS);
   const [reason, setReason] = useState(FALLBACK_REASONS[0]);
@@ -20,6 +26,10 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
   const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Validity is managed by the parent (it clears `approval` via a timer once it expires — see
+  // inventoryList.jsx), so this only needs to check presence, not re-check the clock during render.
+  const hasValidApproval = !!approval;
 
   useEffect(() => {
     let cancelled = false;
@@ -48,27 +58,35 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
       setError('The counted quantity matches the current stock — nothing to adjust.');
       return;
     }
-    if (!/^\d{4,6}$/.test(pin)) {
+    if (!hasValidApproval && !/^\d{4,6}$/.test(pin)) {
       setError('Enter the supervisor PIN (4 to 6 digits).');
       return;
     }
     setIsSubmitting(true);
     try {
-      const approvalRes = await apiFetch(`${API_BASE_URL}/pos/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, action: 'STOCK_ADJUST' }),
-      });
-      const approvalBody = await approvalRes.json().catch(() => ({}));
-      if (!approvalRes.ok) throw new Error(approvalBody.error || 'Supervisor approval failed.');
+      let token = hasValidApproval ? approval.token : null;
+      if (!token) {
+        const approvalRes = await apiFetch(`${API_BASE_URL}/pos/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, action: 'STOCK_ADJUST' }),
+        });
+        const approvalBody = await approvalRes.json().catch(() => ({}));
+        if (!approvalRes.ok) throw new Error(approvalBody.error || 'Supervisor approval failed.');
+        token = approvalBody.token;
+        onApproved({ token, expiresAt: Date.now() + approvalBody.expiresInSeconds * 1000 });
+      }
 
       const res = await apiFetch(`${API_BASE_URL}/products/${product.id}/adjust-stock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Approval-Token': approvalBody.token },
+        headers: { 'Content-Type': 'application/json', 'X-Approval-Token': token },
         body: JSON.stringify({ countedQuantity: countedNum, reason, notes }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        // The cached approval turned out stale (expired right at the boundary, or similar) —
+        // drop it so the next attempt asks for the PIN again instead of retrying the same token.
+        if (body.code === 'APPROVAL_INVALID' || body.code === 'APPROVAL_REQUIRED') onApproved(null);
         throw new Error(body.error || 'Failed to adjust stock');
       }
       onAdjusted(await res.json());
@@ -138,18 +156,22 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
             <input type="text" maxLength={255} value={notes} onChange={(e) => setNotes(e.target.value)} className={fieldClass} placeholder="e.g., Water damage on shelf 3" />
           </div>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Supervisor PIN</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={6}
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-              className={fieldClass}
-              placeholder="Enter supervisor PIN"
-            />
-          </div>
+          {hasValidApproval ? (
+            <p className="text-[11px] font-semibold text-emerald-600">Supervisor already approved — no PIN needed for this adjustment.</p>
+          ) : (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Supervisor PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+                className={fieldClass}
+                placeholder="Enter supervisor PIN"
+              />
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">

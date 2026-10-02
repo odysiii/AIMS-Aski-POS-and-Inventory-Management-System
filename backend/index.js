@@ -409,17 +409,18 @@ app.patch('/api/products/:id/add-stock', authenticateToken, requireRole(...ROLES
 });
 
 // 3b. Manual stock correction with a required reason (logged as ADJUSTMENT). Needs a supervisor
-// approval token (POST /api/pos/approve with action STOCK_ADJUST) in X-Approval-Token, same
-// pattern as voiding a sale.
+// approval token (POST /api/pos/approve with action STOCK_ADJUST) in X-Approval-Token. Unlike
+// every other approval action, this token is NOT consumed on success — it stays valid for every
+// further adjustment (any product) until its own 5-minute expiry, so a supervisor only has to
+// approve once per batch of corrections rather than once per product.
 app.post('/api/products/:id/adjust-stock', authenticateToken, requireRole(...ROLES.INVENTORY_WRITE), async (req, res) => {
   try {
-    const approval = await posApproval.verifyApproval(req.headers['x-approval-token'], {
+    await posApproval.verifyApproval(req.headers['x-approval-token'], {
       action: 'STOCK_ADJUST',
       cashierId: req.user.id,
     });
     const { quantityChange, countedQuantity, reason, notes } = req.body;
     const updatedProduct = await ProductModel.adjustStock(req.params.id, { quantityChange, countedQuantity, reason, notes }, req.user.id);
-    posApproval.consumeApproval(approval);
     req.app.get('io').to(DASHBOARD_ROOM).emit('stock_updated', { products: [updatedProduct] });
     res.json(updatedProduct);
   } catch (error) {
