@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Receipt, Download, Loader2, RefreshCw, Inbox, DollarSign, Wallet, Percent, Ban } from 'lucide-react';
+import { Receipt, Share, Loader2, RefreshCw, Inbox, DollarSign, Wallet, Percent, Ban } from 'lucide-react';
 import { apiFetch } from '../../auth/apiFetch';
 import { exportToExcel } from '../../utils/exportExcel';
 import MonthPicker from '../../components/MonthPicker';
@@ -104,17 +104,18 @@ export default function SalesReport() {
           <MonthPicker value={month} onChange={setMonth} />
           <button
             onClick={fetchReport}
-            className="p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            className="flex items-center gap-1.5 sm:gap-2 p-2 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl bg-white border border-slate-200/60 text-slate-700 font-bold text-xs sm:text-sm hover:bg-slate-50 transition shadow-sm"
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={handleExport}
             disabled={isExporting || rows.length === 0}
             className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-3 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-md shadow-blue-500/30 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share className="w-4 h-4" />}
             Export
           </button>
         </div>

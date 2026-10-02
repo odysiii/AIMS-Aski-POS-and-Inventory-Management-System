@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Trash2, ChevronDown, Plus, Minus,
-  Lock, Clock, Banknote, X, Percent, Download, ShieldCheck,
+  Lock, Clock, Banknote, X, Percent, Share, ShieldCheck,
   Check, LayoutGrid, Package, ShoppingCart,
   Wallet, LogOut, KeyRound, CheckCircle2,
   UserPlus, UserCheck, UserX, Printer, Receipt, Ban
@@ -1779,7 +1779,7 @@ const handleReferenceConfirm = () => {
                 onClick={() => handleExportReport()}
                 className="py-2.5 bg-white hover:bg-slate-50 text-[#0B132B] border border-slate-200 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Share className="w-3.5 h-3.5" />
                 Export X-Reading
               </button>
 

@@ -17,6 +17,7 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
   const [reasons, setReasons] = useState(FALLBACK_REASONS);
   const [reason, setReason] = useState(FALLBACK_REASONS[0]);
   const [notes, setNotes] = useState('');
+  const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -47,11 +48,23 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
       setError('The counted quantity matches the current stock — nothing to adjust.');
       return;
     }
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError('Enter the supervisor PIN (4 to 6 digits).');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/products/${product.id}/adjust-stock`, {
+      const approvalRes = await apiFetch(`${API_BASE_URL}/pos/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, action: 'STOCK_ADJUST' }),
+      });
+      const approvalBody = await approvalRes.json().catch(() => ({}));
+      if (!approvalRes.ok) throw new Error(approvalBody.error || 'Supervisor approval failed.');
+
+      const res = await apiFetch(`${API_BASE_URL}/products/${product.id}/adjust-stock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Approval-Token': approvalBody.token },
         body: JSON.stringify({ countedQuantity: countedNum, reason, notes }),
       });
       if (!res.ok) {
@@ -123,6 +136,19 @@ export default function AdjustStockModal({ product, onClose, onAdjusted }) {
               Notes (optional)
             </label>
             <input type="text" maxLength={255} value={notes} onChange={(e) => setNotes(e.target.value)} className={fieldClass} placeholder="e.g., Water damage on shelf 3" />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Supervisor PIN</label>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+              className={fieldClass}
+              placeholder="Enter supervisor PIN"
+            />
           </div>
         </div>
 

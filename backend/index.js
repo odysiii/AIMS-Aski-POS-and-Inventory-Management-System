@@ -408,14 +408,24 @@ app.patch('/api/products/:id/add-stock', authenticateToken, requireRole(...ROLES
   }
 });
 
-// 3b. Manual stock correction with a required reason (logged as ADJUSTMENT)
+// 3b. Manual stock correction with a required reason (logged as ADJUSTMENT). Needs a supervisor
+// approval token (POST /api/pos/approve with action STOCK_ADJUST) in X-Approval-Token, same
+// pattern as voiding a sale.
 app.post('/api/products/:id/adjust-stock', authenticateToken, requireRole(...ROLES.INVENTORY_WRITE), async (req, res) => {
   try {
+    const approval = await posApproval.verifyApproval(req.headers['x-approval-token'], {
+      action: 'STOCK_ADJUST',
+      cashierId: req.user.id,
+    });
     const { quantityChange, countedQuantity, reason, notes } = req.body;
     const updatedProduct = await ProductModel.adjustStock(req.params.id, { quantityChange, countedQuantity, reason, notes }, req.user.id);
+    posApproval.consumeApproval(approval);
     req.app.get('io').to(DASHBOARD_ROOM).emit('stock_updated', { products: [updatedProduct] });
     res.json(updatedProduct);
   } catch (error) {
+    if (error instanceof posApproval.ApprovalError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
     sendProductError(res, error, 'adjust stock');
   }
 });
@@ -887,8 +897,10 @@ app.post('/api/members', authenticateToken, requireRole(...ROLES.POS), async (re
 // --- POS SUPERVISOR APPROVAL ---
 
 // Exchanges a supervisor's PIN for a short-lived approval token. The token is bound to the
-// requesting cashier and action, and is presented back on checkout / X-Reading.
-app.post('/api/pos/approve', authenticateToken, requireRole(...ROLES.POS), async (req, res) => {
+// requesting cashier and action, and is presented back on checkout / X-Reading / a stock
+// adjustment. INVENTORY is included so inventory staff can request a STOCK_ADJUST token; each
+// action's own route is still the real gate on what that token can actually be redeemed for.
+app.post('/api/pos/approve', authenticateToken, requireRole(...ROLES.POS, 'INVENTORY'), async (req, res) => {
   try {
     const { pin, action, discountPercent } = req.body;
     const result = await posApproval.requestApproval({ requester: req.user, pin, action, discountPercent });

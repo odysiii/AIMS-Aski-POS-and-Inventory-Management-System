@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import DatePicker from '../../components/DatePicker';
 import { createPortal } from 'react-dom';
-import { X, History, Loader2, Inbox, Download, Layers } from 'lucide-react';
+import { X, History, Loader2, Inbox, Share, Layers } from 'lucide-react';
 import { apiFetch } from '../../auth/apiFetch';
 import ReceiptPreviewModal, { LedgerReference } from './ReceiptPreviewModal';
 
@@ -194,7 +194,7 @@ export default function StockHistoryModal({ product, onClose, exportToExcel }) {
                 disabled={isExporting}
                 className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200/80 text-slate-600 font-semibold text-xs rounded-xl hover:border-indigo-200 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-emerald-600" />}
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share className="w-4 h-4 text-emerald-600" />}
                 <span>Export</span>
               </button>
             )}

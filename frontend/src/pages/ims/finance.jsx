@@ -170,10 +170,11 @@ export default function Finance() {
         <div className="flex items-center gap-2 sm:gap-3 relative shrink-0">
           <button
             onClick={fetchFinanceData}
-            className="p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-white border border-slate-200/60 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            className="flex items-center gap-1.5 sm:gap-2 p-2 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl bg-white border border-slate-200/60 text-slate-700 font-bold text-xs sm:text-sm hover:bg-slate-50 transition shadow-sm"
             title="Refresh Data"
           >
             <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
 
           <div className="relative">
